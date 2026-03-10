@@ -1,0 +1,15 @@
+module Blinker(
+    in  clk: Clock,
+    in  rst: SyncReset,
+    out led: Bool
+):
+    signal counter: UInt<24>
+
+    reg(clk, rst):
+        on reset:
+            counter = 0
+        on tick:
+            counter = counter + 1
+
+    comb:
+        led = counter[23]
