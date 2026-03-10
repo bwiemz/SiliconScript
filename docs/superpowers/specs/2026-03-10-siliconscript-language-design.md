@@ -754,7 +754,7 @@ Cross-stage signal references are automatically registered by the compiler.
 
 ---
 
-## Test Block Semantics
+## Section 7 — Test Block Semantics
 
 Test blocks live inside modules and are stripped during synthesis:
 
@@ -772,7 +772,250 @@ Compiled to native binary for fast execution (`sslc --test`). No external simula
 
 ---
 
-## Appendix: File Extensions & Tooling
+## Appendix A — Language Semantics Clarifications
+
+This section resolves ambiguities identified during spec review.
+
+### A.1 `Bool` is a Distinct Type with Implicit Coercion
+
+`Bool` is NOT a type alias for `UInt<1>`. It is a distinct type with implicit bidirectional coercion to/from `UInt<1>`. This means:
+- `Bool` values can be used where `UInt<1>` is expected, and vice versa
+- `Bool` has logical semantics (`and`, `or`, `not`); `UInt<1>` has bitwise semantics (`&`, `|`, `~`)
+- They are the same width (1 bit) but different types in the type checker
+
+### A.2 Port Direction Syntax: `in`/`out` Keywords vs `In<T>`/`Out<T>` Wrappers
+
+These are NOT interchangeable. They are used in different contexts:
+
+- **`in`/`out`/`inout` keywords** — used ONLY in module port lists:
+  ```
+  module Foo(in a: UInt<8>, out b: UInt<8>):
+  ```
+- **`In<T>`/`Out<T>`/`InOut<T>` wrappers** — used ONLY in interface definitions:
+  ```
+  interface Stream<T: type>:
+      data: Out<T>
+      valid: Out<Bool>
+      ready: In<Bool>
+  ```
+
+The keywords are syntactic sugar for readability in port lists. The wrapper types are required in interfaces because interface signals carry direction as part of their type (needed for `Flip<T>` inversion).
+
+### A.3 Array Syntax Sugar
+
+`T[N]` is syntactic sugar for `Array<T, N>`. Both forms are valid:
+```
+signal a: UInt<8>[32]          // sugar form (preferred)
+signal b: Array<UInt<8>, 32>   // explicit form (allowed)
+```
+
+### A.4 `cdc()` Formal Signature
+
+```
+cdc<T: type>(
+    signal:  T @ DOMAIN_A,
+    from:    Domain,
+    to:      Domain,
+    method:  CdcMethod
+) -> T @ DOMAIN_B
+```
+
+Where `CdcMethod` is one of: `two_ff_sync`, `gray_code`, `async_fifo<depth=N>`, `handshake`, `pulse_sync`. These are enum-like values passed to the `method` parameter, not standalone functions.
+
+For `async_fifo`, the input and output are `Stream<T>` types (valid/ready handshake is part of the FIFO).
+
+### A.5 `fn` — Pure Combinational Functions
+
+```
+fn NAME [<GENERICS>] ( PARAMS ) -> RETURN_TYPE :
+    BODY
+```
+
+Pure combinational functions:
+- No side effects, no signal assignments, no register inference
+- Always inlined by the compiler (no function call overhead in hardware)
+- Can only be called from within `comb` blocks or other `fn` bodies
+- Parameters and return types must be hardware types
+- Body is a single expression or indented block of `let` bindings + final expression
+
+```
+fn clamp(val: SInt<16>, lo: SInt<16>, hi: SInt<16>) -> SInt<16>:
+    if val < lo: lo
+    elif val > hi: hi
+    else: val
+```
+
+### A.6 `group` Grammar in Interfaces
+
+```
+interface NAME [<GENERICS>]:
+    [group GROUP_NAME:
+        SIGNAL_DECL+
+    ]*
+    [SIGNAL_DECL]*                    // ungrouped signals allowed
+    [property PROP_NAME:
+        ASSERTION
+    ]*
+```
+
+Groups are optional organizational blocks within interfaces. Ungrouped signals and grouped signals can coexist. Groups enable partial binding via `.{group1, group2}` syntax.
+
+### A.7 `gen_table()` — Compile-Time Table Generation
+
+```
+gen_table<T: type, N: uint>(generator: fn(uint) -> T) -> T[N]
+```
+
+Evaluates `generator(i)` for `i` in `0..N` at compile time, producing a constant array. The generator function runs in the compiler's const-evaluation engine and has access to compile-time math functions (`sin`, `cos`, `sqrt`, `log2`, etc.).
+
+```
+const TABLE: SInt<8>[256] = gen_table(i =>
+    SInt<8>.from_float(sin(2.0 * PI * i / 256) * 127.0)
+)
+```
+
+### A.8 `if`/`then`/`else` Expression Syntax
+
+`then` is required ONLY in inline (expression) form of `if`:
+```
+// Expression form (inline ternary) — requires `then`
+let x = if cond then value_a else value_b
+
+// Block form (statement) — does NOT use `then`
+if cond:
+    x = value_a
+elif other_cond:
+    x = value_b
+else:
+    x = value_c
+```
+
+### A.9 Range Semantics
+
+`a..b` is a **half-open range** — inclusive of `a`, exclusive of `b` (Rust convention):
+```
+for i in 0..8:     // i = 0, 1, 2, 3, 4, 5, 6, 7
+```
+
+`a..=b` is a **closed range** — inclusive of both ends:
+```
+for i in 0..=7:    // i = 0, 1, 2, 3, 4, 5, 6, 7  (same as 0..8)
+```
+
+Bit slices use inclusive syntax with colon: `signal[7:0]` = bits 7 down to 0 (both inclusive, 8 bits). This matches hardware convention.
+
+### A.10 `let` vs `signal` Semantics
+
+| Keyword | Context | Semantics |
+|---|---|---|
+| `signal` | Module body | Declares a named wire or register (depending on usage in `comb`/`reg`). Visible across the module. |
+| `let` | Inside `comb`/`reg`/`fn` blocks | Declares a local intermediate value. Scoped to the block. Does not create a named net in the output netlist. |
+
+`let` is for computation intermediates; `signal` is for module-level wires that may be connected to ports or sub-modules.
+
+### A.11 `.widen()` Method
+
+`.widen()` adds exactly 1 bit to the width:
+```
+UInt<N>.widen() -> UInt<N+1>    // zero-extends by 1 bit
+SInt<N>.widen() -> SInt<N+1>    // sign-extends by 1 bit
+```
+
+This is specifically designed for arithmetic: `a.widen() + b.widen()` produces `UInt<max(N,M)+1>`, capturing the carry bit without requiring the user to specify the target width.
+
+### A.12 Built-in Compile-Time Functions
+
+| Function | Signature | Description |
+|---|---|---|
+| `clog2(n)` | `uint -> uint` | Ceiling log base 2 |
+| `is_power_of_2(n)` | `uint -> bool` | True if n is a power of 2 |
+| `max(a, b)` | `uint, uint -> uint` | Maximum |
+| `min(a, b)` | `uint, uint -> uint` | Minimum |
+| `sin(x)`, `cos(x)` | `float -> float` | Trig (for `gen_table` only) |
+| `sqrt(x)` | `float -> float` | Square root (for `gen_table` only) |
+| `log2(x)` | `float -> float` | Log base 2 (for `gen_table` only) |
+
+Float functions are available only in compile-time const evaluation contexts (e.g., `gen_table` lambdas). They do NOT synthesize to hardware.
+
+### A.13 `type` Alias Syntax
+
+```
+type NAME [<GENERICS>] = TYPE_EXPR
+```
+
+Creates a type alias. The alias is fully transparent — the compiler treats it as identical to the underlying type:
+```
+type Word = UInt<32>
+type Memory<W: uint, D: uint> = UInt<W>[D]
+
+signal a: Word              // identical to UInt<32>
+signal b: Memory<8, 256>    // identical to UInt<8>[256]
+```
+
+### A.14 `Flip<T>` Semantics
+
+`Flip<T>` recursively inverts all `In` ↔ `Out` directions within type `T`:
+
+- `Flip<In<T>>` → `Out<T>`
+- `Flip<Out<T>>` → `In<T>`
+- `Flip<InOut<T>>` → `InOut<T>` (bidirectional unchanged)
+- For structs/interfaces: `Flip` recurses into all fields
+- Non-directional fields (e.g., `const` parameters) are unchanged
+- `Flip<Flip<T>>` = `T` (double flip is identity)
+
+### A.15 Generate-Loop Signal Naming
+
+Signal names in `gen for` blocks use `_{LOOP_VAR}` suffix interpolation:
+```
+gen for i in 0..4:
+    signal partial_{i}: UInt<8>    // creates: partial_0, partial_1, partial_2, partial_3
+```
+
+Rules:
+- Only loop variable names can appear in `{}`
+- Only simple identifiers, no expressions (e.g., `{i+1}` is NOT valid)
+- Nested loops: `signal cell_{i}_{j}` is valid
+- The interpolation is purely for naming — it creates distinct signals
+
+### A.16 Memory Access Context
+
+`Memory` primitives have two access patterns depending on context:
+
+- **In `comb` block:** `.read(addr=...)` produces combinational (async) read — maps to distributed RAM or LUT
+- **In `reg` block:** `.read(addr=...)` produces registered (sync) read — maps to BRAM (1-cycle latency)
+- **`.write(addr=..., data=..., enable=...)` must always be in a `reg` block** — writes are always synchronous
+
+The compiler uses the access context to determine whether to infer BRAM or distributed RAM, along with any `@use_resource` attribute.
+
+### A.17 `tick` Keyword — Dual Role
+
+`tick` has two distinct uses determined by context:
+- **In `reg` blocks:** `on tick:` is a block label introducing clocked logic (keyword)
+- **In `test` blocks:** `tick()` / `tick(N)` is a function call advancing simulation by N clock cycles
+
+These are syntactically unambiguous because `on tick:` only appears after `on reset:` inside `reg` blocks, while `tick()` is a function call with parentheses.
+
+### A.18 Naming: SSL Abbreviation
+
+The abbreviation "SSL" is acknowledged to conflict with Secure Sockets Layer. In documentation, prefer the full name "SiliconScript" or the file extension `.ssl`. The compiler binary is `sslc` (SiliconScript Compiler). If the conflict proves problematic, the extension could be changed to `.sls` in a future revision.
+
+### A.19 AXI4Lite Interface Groups (Corrected)
+
+The complete AXI4Lite interface defines five channel groups:
+```
+interface AXI4Lite<ADDR_W: uint = 32, DATA_W: uint = 32>:
+    group write_addr:    // awaddr, awvalid, awready
+    group write_data:    // wdata, wstrb, wvalid, wready
+    group write_resp:    // bresp, bvalid, bready
+    group read_addr:     // araddr, arvalid, arready
+    group read_data:     // rdata, rresp, rvalid, rready
+```
+
+The partial binding example `AXI4Lite.{read_addr, read_data}` references both `read_addr` and `read_data` groups.
+
+---
+
+## Appendix B — File Extensions & Tooling
 
 | Artifact | Extension | Command |
 |---|---|---|
