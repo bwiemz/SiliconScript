@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use ssl_core::lexer::tokenize;
+use std::path::PathBuf;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

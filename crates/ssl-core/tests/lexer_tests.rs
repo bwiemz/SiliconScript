@@ -1,4 +1,4 @@
-use ssl_core::lexer::{lex, tokenize, Token, NumericLiteral, NumericBase};
+use ssl_core::lexer::{NumericBase, NumericLiteral, Token, lex, tokenize};
 
 fn snapshot_tokens(source: &str) -> String {
     let tokens = tokenize(source).expect("tokenize failed");
@@ -51,7 +51,12 @@ fn keywords() {
     let tokens = token_types("module signal reg comb");
     assert_eq!(
         tokens,
-        vec![Token::KwModule, Token::KwSignal, Token::KwReg, Token::KwComb]
+        vec![
+            Token::KwModule,
+            Token::KwSignal,
+            Token::KwReg,
+            Token::KwComb
+        ]
     );
 }
 
@@ -175,7 +180,10 @@ fn module_port_list() {
 #[test]
 fn arrows() {
     let tokens = token_types("-> => -->");
-    assert_eq!(tokens, vec![Token::ThinArrow, Token::FatArrow, Token::LongArrow]);
+    assert_eq!(
+        tokens,
+        vec![Token::ThinArrow, Token::FatArrow, Token::LongArrow]
+    );
 }
 
 #[test]

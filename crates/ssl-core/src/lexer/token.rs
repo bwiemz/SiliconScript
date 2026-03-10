@@ -35,126 +35,226 @@ pub enum Token {
     Dedent,
 
     // Hardware Construct Keywords
-    #[token("module")] KwModule,
-    #[token("signal")] KwSignal,
-    #[token("reg")] KwReg,
-    #[token("comb")] KwComb,
-    #[token("in")] KwIn,
-    #[token("out")] KwOut,
-    #[token("inout")] KwInout,
-    #[token("inst")] KwInst,
-    #[token("extern")] KwExtern,
-    #[token("domain")] KwDomain,
+    #[token("module")]
+    KwModule,
+    #[token("signal")]
+    KwSignal,
+    #[token("reg")]
+    KwReg,
+    #[token("comb")]
+    KwComb,
+    #[token("in")]
+    KwIn,
+    #[token("out")]
+    KwOut,
+    #[token("inout")]
+    KwInout,
+    #[token("inst")]
+    KwInst,
+    #[token("extern")]
+    KwExtern,
+    #[token("domain")]
+    KwDomain,
 
     // Type Construct Keywords
-    #[token("struct")] KwStruct,
-    #[token("enum")] KwEnum,
-    #[token("interface")] KwInterface,
-    #[token("type")] KwType,
-    #[token("const")] KwConst,
-    #[token("let")] KwLet,
-    #[token("fn")] KwFn,
-    #[token("group")] KwGroup,
+    #[token("struct")]
+    KwStruct,
+    #[token("enum")]
+    KwEnum,
+    #[token("interface")]
+    KwInterface,
+    #[token("type")]
+    KwType,
+    #[token("const")]
+    KwConst,
+    #[token("let")]
+    KwLet,
+    #[token("fn")]
+    KwFn,
+    #[token("group")]
+    KwGroup,
 
     // Sequential Construct Keywords
-    #[token("fsm")] KwFsm,
-    #[token("pipeline")] KwPipeline,
-    #[token("stage")] KwStage,
-    #[token("on")] KwOn,
-    #[token("reset")] KwReset,
-    #[token("tick")] KwTick,
+    #[token("fsm")]
+    KwFsm,
+    #[token("pipeline")]
+    KwPipeline,
+    #[token("stage")]
+    KwStage,
+    #[token("on")]
+    KwOn,
+    #[token("reset")]
+    KwReset,
+    #[token("tick")]
+    KwTick,
 
     // Control Flow Keywords
-    #[token("match")] KwMatch,
-    #[token("if")] KwIf,
-    #[token("elif")] KwElif,
-    #[token("else")] KwElse,
-    #[token("then")] KwThen,
-    #[token("for")] KwFor,
-    #[token("gen")] KwGen,
-    #[token("when")] KwWhen,
-    #[token("priority")] KwPriority,
-    #[token("parallel")] KwParallel,
-    #[token("otherwise")] KwOtherwise,
+    #[token("match")]
+    KwMatch,
+    #[token("if")]
+    KwIf,
+    #[token("elif")]
+    KwElif,
+    #[token("else")]
+    KwElse,
+    #[token("then")]
+    KwThen,
+    #[token("for")]
+    KwFor,
+    #[token("gen")]
+    KwGen,
+    #[token("when")]
+    KwWhen,
+    #[token("priority")]
+    KwPriority,
+    #[token("parallel")]
+    KwParallel,
+    #[token("otherwise")]
+    KwOtherwise,
 
     // Formal Verification Keywords
-    #[token("assert")] KwAssert,
-    #[token("assume")] KwAssume,
-    #[token("cover")] KwCover,
-    #[token("property")] KwProperty,
-    #[token("sequence")] KwSequence,
-    #[token("always")] KwAlways,
-    #[token("eventually")] KwEventually,
-    #[token("until")] KwUntil,
-    #[token("implies")] KwImplies,
-    #[token("verify")] KwVerify,
-    #[token("forall")] KwForall,
-    #[token("next")] KwNext,
+    #[token("assert")]
+    KwAssert,
+    #[token("assume")]
+    KwAssume,
+    #[token("cover")]
+    KwCover,
+    #[token("property")]
+    KwProperty,
+    #[token("sequence")]
+    KwSequence,
+    #[token("always")]
+    KwAlways,
+    #[token("eventually")]
+    KwEventually,
+    #[token("until")]
+    KwUntil,
+    #[token("implies")]
+    KwImplies,
+    #[token("verify")]
+    KwVerify,
+    #[token("forall")]
+    KwForall,
+    #[token("next")]
+    KwNext,
 
     // Literal & Logic Keywords
-    #[token("true")] KwTrue,
-    #[token("false")] KwFalse,
-    #[token("and")] KwAnd,
-    #[token("or")] KwOr,
-    #[token("not")] KwNot,
+    #[token("true")]
+    KwTrue,
+    #[token("false")]
+    KwFalse,
+    #[token("and")]
+    KwAnd,
+    #[token("or")]
+    KwOr,
+    #[token("not")]
+    KwNot,
 
     // Module System Keywords
-    #[token("import")] KwImport,
-    #[token("from")] KwFrom,
-    #[token("as")] KwAs,
-    #[token("pub")] KwPub,
+    #[token("import")]
+    KwImport,
+    #[token("from")]
+    KwFrom,
+    #[token("as")]
+    KwAs,
+    #[token("pub")]
+    KwPub,
 
     // Safety Keywords
-    #[token("unchecked")] KwUnchecked,
-    #[token("static_assert")] KwStaticAssert,
+    #[token("unchecked")]
+    KwUnchecked,
+    #[token("static_assert")]
+    KwStaticAssert,
 
     // Test Keyword
-    #[token("test")] KwTest,
+    #[token("test")]
+    KwTest,
 
     // Operators (multi-char before single-char for correct matching)
-    #[token(">>>")] ArithShiftRight,
-    #[token("-->")] LongArrow,
-    #[token("**")] StarStar,
-    #[token("++")] Concat,
-    #[token("|>")] PipeOp,
-    #[token("==")] EqEq,
-    #[token("!=")] NotEq,
-    #[token("<=")] LessEq,
-    #[token(">=")] GreaterEq,
-    #[token("<<")] ShiftLeft,
-    #[token(">>")] ShiftRight,
-    #[token("=>")] FatArrow,
-    #[token("->")] ThinArrow,
-    #[token("--")] DashDash,
-    #[token("..=")] RangeInclusive,
-    #[token("..")] RangeExclusive,
-    #[token("+")] Plus,
-    #[token("-")] Minus,
-    #[token("*")] Star,
-    #[token("/")] Slash,
-    #[token("%")] Percent,
-    #[token("&")] Ampersand,
-    #[token("|")] Pipe,
-    #[token("^")] Caret,
-    #[token("~")] Tilde,
-    #[token("<")] Less,
-    #[token(">")] Greater,
-    #[token("=")] Eq,
-    #[token("@")] At,
-    #[token("?")] Question,
+    #[token(">>>")]
+    ArithShiftRight,
+    #[token("-->")]
+    LongArrow,
+    #[token("**")]
+    StarStar,
+    #[token("++")]
+    Concat,
+    #[token("|>")]
+    PipeOp,
+    #[token("==")]
+    EqEq,
+    #[token("!=")]
+    NotEq,
+    #[token("<=")]
+    LessEq,
+    #[token(">=")]
+    GreaterEq,
+    #[token("<<")]
+    ShiftLeft,
+    #[token(">>")]
+    ShiftRight,
+    #[token("=>")]
+    FatArrow,
+    #[token("->")]
+    ThinArrow,
+    #[token("--")]
+    DashDash,
+    #[token("..=")]
+    RangeInclusive,
+    #[token("..")]
+    RangeExclusive,
+    #[token("+")]
+    Plus,
+    #[token("-")]
+    Minus,
+    #[token("*")]
+    Star,
+    #[token("/")]
+    Slash,
+    #[token("%")]
+    Percent,
+    #[token("&")]
+    Ampersand,
+    #[token("|")]
+    Pipe,
+    #[token("^")]
+    Caret,
+    #[token("~")]
+    Tilde,
+    #[token("<")]
+    Less,
+    #[token(">")]
+    Greater,
+    #[token("=")]
+    Eq,
+    #[token("@")]
+    At,
+    #[token("?")]
+    Question,
 
     // Delimiters
-    #[token("(")] LParen,
-    #[token(")")] RParen,
-    #[token("[")] LBracket,
-    #[token("]")] RBracket,
-    #[token("{")] LBrace,
-    #[token("}")] RBrace,
-    #[token(":")] Colon,
-    #[token(",")] Comma,
-    #[token(".")] Dot,
-    #[token("_")] Underscore,
-    #[token("\\")] Backslash,
+    #[token("(")]
+    LParen,
+    #[token(")")]
+    RParen,
+    #[token("[")]
+    LBracket,
+    #[token("]")]
+    RBracket,
+    #[token("{")]
+    LBrace,
+    #[token("}")]
+    RBrace,
+    #[token(":")]
+    Colon,
+    #[token(",")]
+    Comma,
+    #[token(".")]
+    Dot,
+    #[token("_")]
+    Underscore,
+    #[token("\\")]
+    Backslash,
 
     // Literals — numeric uses callbacks
     // Sized binary literals: N'bXXX (allows ? for don't-care)
@@ -228,21 +328,65 @@ impl Token {
     pub fn is_keyword(&self) -> bool {
         matches!(
             self,
-            Token::KwModule | Token::KwSignal | Token::KwReg | Token::KwComb
-                | Token::KwIn | Token::KwOut | Token::KwInout | Token::KwInst
-                | Token::KwExtern | Token::KwDomain | Token::KwStruct | Token::KwEnum
-                | Token::KwInterface | Token::KwType | Token::KwConst | Token::KwLet
-                | Token::KwFn | Token::KwGroup | Token::KwFsm | Token::KwPipeline
-                | Token::KwStage | Token::KwOn | Token::KwReset | Token::KwTick
-                | Token::KwMatch | Token::KwIf | Token::KwElif | Token::KwElse
-                | Token::KwThen | Token::KwFor | Token::KwGen | Token::KwWhen
-                | Token::KwPriority | Token::KwParallel | Token::KwOtherwise
-                | Token::KwAssert | Token::KwAssume | Token::KwCover | Token::KwProperty
-                | Token::KwSequence | Token::KwAlways | Token::KwEventually | Token::KwUntil
-                | Token::KwImplies | Token::KwVerify | Token::KwForall | Token::KwNext
-                | Token::KwTrue | Token::KwFalse | Token::KwAnd | Token::KwOr | Token::KwNot
-                | Token::KwImport | Token::KwFrom | Token::KwAs | Token::KwPub
-                | Token::KwUnchecked | Token::KwStaticAssert | Token::KwTest
+            Token::KwModule
+                | Token::KwSignal
+                | Token::KwReg
+                | Token::KwComb
+                | Token::KwIn
+                | Token::KwOut
+                | Token::KwInout
+                | Token::KwInst
+                | Token::KwExtern
+                | Token::KwDomain
+                | Token::KwStruct
+                | Token::KwEnum
+                | Token::KwInterface
+                | Token::KwType
+                | Token::KwConst
+                | Token::KwLet
+                | Token::KwFn
+                | Token::KwGroup
+                | Token::KwFsm
+                | Token::KwPipeline
+                | Token::KwStage
+                | Token::KwOn
+                | Token::KwReset
+                | Token::KwTick
+                | Token::KwMatch
+                | Token::KwIf
+                | Token::KwElif
+                | Token::KwElse
+                | Token::KwThen
+                | Token::KwFor
+                | Token::KwGen
+                | Token::KwWhen
+                | Token::KwPriority
+                | Token::KwParallel
+                | Token::KwOtherwise
+                | Token::KwAssert
+                | Token::KwAssume
+                | Token::KwCover
+                | Token::KwProperty
+                | Token::KwSequence
+                | Token::KwAlways
+                | Token::KwEventually
+                | Token::KwUntil
+                | Token::KwImplies
+                | Token::KwVerify
+                | Token::KwForall
+                | Token::KwNext
+                | Token::KwTrue
+                | Token::KwFalse
+                | Token::KwAnd
+                | Token::KwOr
+                | Token::KwNot
+                | Token::KwImport
+                | Token::KwFrom
+                | Token::KwAs
+                | Token::KwPub
+                | Token::KwUnchecked
+                | Token::KwStaticAssert
+                | Token::KwTest
         )
     }
 }

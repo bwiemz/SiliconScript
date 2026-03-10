@@ -1,11 +1,11 @@
-mod token;
-mod numeric;
-mod lex;
 mod indent;
+mod lex;
+mod numeric;
+mod token;
 
-pub use token::{Token, NumericLiteral, NumericBase};
-pub use lex::{lex, LexError};
-pub use indent::{process_indentation, IndentError};
+pub use indent::{IndentError, process_indentation};
+pub use lex::{LexError, lex};
+pub use token::{NumericBase, NumericLiteral, Token};
 // parse_numeric is pub(crate) — only used by logos callbacks in token.rs
 
 use crate::span::Spanned;

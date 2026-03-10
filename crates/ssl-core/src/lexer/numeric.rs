@@ -65,15 +65,26 @@ pub(crate) fn parse_numeric(s: &str) -> Option<NumericLiteral> {
             return None;
         }
 
-        return Some(NumericLiteral::Sized { width, value, base, dont_care_mask });
+        return Some(NumericLiteral::Sized {
+            width,
+            value,
+            base,
+            dont_care_mask,
+        });
     }
 
     let clean: String = s.chars().filter(|&c| c != '_').collect();
 
-    if let Some(hex) = clean.strip_prefix("0x").or_else(|| clean.strip_prefix("0X")) {
+    if let Some(hex) = clean
+        .strip_prefix("0x")
+        .or_else(|| clean.strip_prefix("0X"))
+    {
         let value = u128::from_str_radix(hex, 16).ok()?;
         Some(NumericLiteral::Hex(value))
-    } else if let Some(bin) = clean.strip_prefix("0b").or_else(|| clean.strip_prefix("0B")) {
+    } else if let Some(bin) = clean
+        .strip_prefix("0b")
+        .or_else(|| clean.strip_prefix("0B"))
+    {
         let value = u128::from_str_radix(bin, 2).ok()?;
         Some(NumericLiteral::Binary(value))
     } else {
@@ -93,7 +104,10 @@ mod tests {
 
     #[test]
     fn decimal_with_underscores() {
-        assert_eq!(parse_numeric("1_000_000"), Some(NumericLiteral::Decimal(1_000_000)));
+        assert_eq!(
+            parse_numeric("1_000_000"),
+            Some(NumericLiteral::Decimal(1_000_000))
+        );
     }
 
     #[test]
@@ -103,19 +117,30 @@ mod tests {
 
     #[test]
     fn hex_literal_upper() {
-        assert_eq!(parse_numeric("0xDEAD_BEEF"), Some(NumericLiteral::Hex(0xDEAD_BEEF)));
+        assert_eq!(
+            parse_numeric("0xDEAD_BEEF"),
+            Some(NumericLiteral::Hex(0xDEAD_BEEF))
+        );
     }
 
     #[test]
     fn binary_literal() {
-        assert_eq!(parse_numeric("0b1010_0011"), Some(NumericLiteral::Binary(0b1010_0011)));
+        assert_eq!(
+            parse_numeric("0b1010_0011"),
+            Some(NumericLiteral::Binary(0b1010_0011))
+        );
     }
 
     #[test]
     fn sized_binary() {
         assert_eq!(
             parse_numeric("8'b1010_0011"),
-            Some(NumericLiteral::Sized { width: 8, value: 0b1010_0011, base: NumericBase::Binary, dont_care_mask: 0 })
+            Some(NumericLiteral::Sized {
+                width: 8,
+                value: 0b1010_0011,
+                base: NumericBase::Binary,
+                dont_care_mask: 0
+            })
         );
     }
 
@@ -123,7 +148,12 @@ mod tests {
     fn sized_hex() {
         assert_eq!(
             parse_numeric("16'hDEAD"),
-            Some(NumericLiteral::Sized { width: 16, value: 0xDEAD, base: NumericBase::Hex, dont_care_mask: 0 })
+            Some(NumericLiteral::Sized {
+                width: 16,
+                value: 0xDEAD,
+                base: NumericBase::Hex,
+                dont_care_mask: 0
+            })
         );
     }
 
@@ -131,7 +161,12 @@ mod tests {
     fn sized_decimal() {
         assert_eq!(
             parse_numeric("8'd255"),
-            Some(NumericLiteral::Sized { width: 8, value: 255, base: NumericBase::Decimal, dont_care_mask: 0 })
+            Some(NumericLiteral::Sized {
+                width: 8,
+                value: 255,
+                base: NumericBase::Decimal,
+                dont_care_mask: 0
+            })
         );
     }
 
@@ -139,7 +174,12 @@ mod tests {
     fn sized_with_dont_care() {
         assert_eq!(
             parse_numeric("4'b10??"),
-            Some(NumericLiteral::Sized { width: 4, value: 0b1000, base: NumericBase::Binary, dont_care_mask: 0b0011 })
+            Some(NumericLiteral::Sized {
+                width: 4,
+                value: 0b1000,
+                base: NumericBase::Binary,
+                dont_care_mask: 0b0011
+            })
         );
     }
 

@@ -1,5 +1,5 @@
-use crate::span::{Span, Spanned};
 use super::token::Token;
+use crate::span::{Span, Spanned};
 
 pub fn process_indentation(
     source: &str,
