@@ -1,0 +1,12 @@
+[package]
+name = "ssl-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+logos = { workspace = true }
+miette = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }

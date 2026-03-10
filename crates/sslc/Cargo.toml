@@ -1,0 +1,8 @@
+[package]
+name = "sslc"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+ssl-core = { path = "../ssl-core" }
+miette = { workspace = true, features = ["fancy"] }
