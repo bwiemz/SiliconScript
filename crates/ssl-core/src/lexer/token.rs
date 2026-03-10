@@ -1,7 +1,7 @@
 use logos::Logos;
 
 /// Numeric literal value parsed from source.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NumericLiteral {
     /// Unsized decimal: `42`, `1_000_000`
     Decimal(u128),
