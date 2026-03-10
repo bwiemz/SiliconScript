@@ -10,6 +10,10 @@ pub fn parse_numeric(s: &str) -> Option<NumericLiteral> {
             return None;
         }
 
+        if width > 128 {
+            return None;
+        }
+
         let (base, digits) = match rest.as_bytes()[0] {
             b'b' | b'B' => (NumericBase::Binary, &rest[1..]),
             b'h' | b'H' => (NumericBase::Hex, &rest[1..]),
@@ -24,6 +28,11 @@ pub fn parse_numeric(s: &str) -> Option<NumericLiteral> {
             NumericBase::Decimal => 10,
             NumericBase::Hex => 16,
         };
+
+        // Don't-care (`?`) is only valid in binary literals.
+        if base != NumericBase::Binary && stripped.iter().any(|&c| c == '?') {
+            return None;
+        }
 
         let mut dont_care_mask: u128 = 0;
         if base == NumericBase::Binary {
@@ -132,5 +141,18 @@ mod tests {
     #[test]
     fn zero() {
         assert_eq!(parse_numeric("0"), Some(NumericLiteral::Decimal(0)));
+    }
+
+    #[test]
+    fn width_too_large() {
+        assert_eq!(parse_numeric("200'hFF"), None);
+    }
+
+    #[test]
+    fn hex_no_dont_care() {
+        // After fix, the regex won't match `8'hF?` at all (no `?` in hex pattern),
+        // so it never reaches parse_numeric. Verify parse_numeric itself also rejects it
+        // if somehow called directly: `?` is not a valid hex digit, so from_str_radix fails.
+        assert_eq!(parse_numeric("8'hF?"), None);
     }
 }

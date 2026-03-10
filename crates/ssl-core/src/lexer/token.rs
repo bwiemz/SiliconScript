@@ -157,8 +157,10 @@ pub enum Token {
     #[token("\\")] Backslash,
 
     // Literals — numeric uses callbacks
-    // Sized literals: N'bXXX, N'hXXX, N'dXXX
-    #[regex(r"[0-9]+'[bBhHdD][0-9a-fA-F_?]+", lex_sized_numeric, priority = 5)]
+    // Sized binary literals: N'bXXX (allows ? for don't-care)
+    #[regex(r"[0-9]+'[bB][01_?]+", lex_sized_numeric, priority = 5)]
+    // Sized hex/decimal literals: N'hXXX, N'dXXX (no ? allowed)
+    #[regex(r"[0-9]+'[hHdD][0-9a-fA-F_]+", lex_sized_numeric, priority = 5)]
     // Hex: 0xFF
     #[regex(r"0[xX][0-9a-fA-F_]+", lex_unsized_numeric, priority = 4)]
     // Binary: 0b1010
