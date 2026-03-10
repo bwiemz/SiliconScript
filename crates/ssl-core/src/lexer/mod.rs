@@ -2,4 +2,4 @@ mod token;
 mod numeric;
 
 pub use token::{Token, NumericLiteral, NumericBase};
-pub use numeric::parse_numeric;
+// parse_numeric is pub(crate) — only used by logos callbacks in token.rs

@@ -1,6 +1,16 @@
 use super::token::{NumericBase, NumericLiteral};
 
-pub fn parse_numeric(s: &str) -> Option<NumericLiteral> {
+/// Parse a numeric literal string into a NumericLiteral.
+///
+/// Formats:
+/// - Decimal: `42`, `1_000_000`
+/// - Hex: `0xFF`, `0xDEAD_BEEF`
+/// - Binary: `0b1010_0011`
+/// - Sized: `8'b1010_0011`, `16'hDEAD`, `8'd255`
+///
+/// Underscores are allowed anywhere after the prefix for readability.
+/// Don't-care bits (`?`) are only valid in sized binary literals.
+pub(crate) fn parse_numeric(s: &str) -> Option<NumericLiteral> {
     if let Some(tick_pos) = s.find('\'') {
         let width_str = &s[..tick_pos];
         let width: u32 = width_str.parse().ok()?;
@@ -10,7 +20,7 @@ pub fn parse_numeric(s: &str) -> Option<NumericLiteral> {
             return None;
         }
 
-        if width > 128 {
+        if width == 0 || width > 128 {
             return None;
         }
 
@@ -30,7 +40,7 @@ pub fn parse_numeric(s: &str) -> Option<NumericLiteral> {
         };
 
         // Don't-care (`?`) is only valid in binary literals.
-        if base != NumericBase::Binary && stripped.iter().any(|&c| c == '?') {
+        if base != NumericBase::Binary && stripped.contains(&'?') {
             return None;
         }
 
@@ -141,6 +151,11 @@ mod tests {
     #[test]
     fn zero() {
         assert_eq!(parse_numeric("0"), Some(NumericLiteral::Decimal(0)));
+    }
+
+    #[test]
+    fn width_zero() {
+        assert_eq!(parse_numeric("0'b0"), None);
     }
 
     #[test]
