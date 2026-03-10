@@ -1,0 +1,26 @@
+---
+source: crates/ssl-core/tests/lexer_tests.rs
+expression: "snapshot_tokens(\"signal counter: UInt<8>\\nsignal offset: SInt<16> @ sys_clk\\nsignal enable: Bool\")"
+---
+   0..6    KwSignal
+   7..14   Ident
+  14..15   Colon
+  16..20   Ident
+  20..21   Less
+  21..22   Numeric(Decimal(8))
+  22..23   Greater
+  23..24   Newline
+  24..30   KwSignal
+  31..37   Ident
+  37..38   Colon
+  39..43   Ident
+  43..44   Less
+  44..46   Numeric(Decimal(16))
+  46..47   Greater
+  48..49   At
+  50..57   Ident
+  57..58   Newline
+  58..64   KwSignal
+  65..71   Ident
+  71..72   Colon
+  73..77   Ident

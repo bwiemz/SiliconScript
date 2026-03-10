@@ -1,0 +1,30 @@
+---
+source: crates/ssl-core/tests/lexer_tests.rs
+expression: "snapshot_tokens(\"comb:\\n    result = raw_adc\\n        |> sign_extend(to=16)\\n        |> scale(factor=3)\")"
+---
+   0..4    KwComb
+   4..5    Colon
+   5..6    Newline
+   6..10   Indent
+  10..16   Ident
+  17..18   Eq
+  19..26   Ident
+  26..27   Newline
+  27..35   Indent
+  35..37   PipeOp
+  38..49   Ident
+  49..50   LParen
+  50..52   Ident
+  52..53   Eq
+  53..55   Numeric(Decimal(16))
+  55..56   RParen
+  56..57   Newline
+  65..67   PipeOp
+  68..73   Ident
+  73..74   LParen
+  74..80   Ident
+  80..81   Eq
+  81..82   Numeric(Decimal(3))
+  82..83   RParen
+  83..83   Dedent
+  83..83   Dedent

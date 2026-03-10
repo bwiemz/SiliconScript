@@ -1,0 +1,41 @@
+---
+source: crates/ssl-core/tests/lexer_tests.rs
+expression: "snapshot_tokens(\"reg(clk, rst):\\n    on reset:\\n        counter = 0\\n    on tick:\\n        if enable:\\n            counter = counter + 1\")"
+---
+   0..3    KwReg
+   3..4    LParen
+   4..7    Ident
+   7..8    Comma
+   9..12   Ident
+  12..13   RParen
+  13..14   Colon
+  14..15   Newline
+  15..19   Indent
+  19..21   KwOn
+  22..27   KwReset
+  27..28   Colon
+  28..29   Newline
+  29..37   Indent
+  37..44   Ident
+  45..46   Eq
+  47..48   Numeric(Decimal(0))
+  48..49   Newline
+  49..53   Dedent
+  53..55   KwOn
+  56..60   KwTick
+  60..61   Colon
+  61..62   Newline
+  62..70   Indent
+  70..72   KwIf
+  73..79   Ident
+  79..80   Colon
+  80..81   Newline
+  81..93   Indent
+  93..100  Ident
+ 101..102  Eq
+ 103..110  Ident
+ 111..112  Plus
+ 113..114  Numeric(Decimal(1))
+ 114..114  Dedent
+ 114..114  Dedent
+ 114..114  Dedent

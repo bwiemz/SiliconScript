@@ -1,5 +1,42 @@
 use ssl_core::lexer::{lex, tokenize, Token, NumericLiteral, NumericBase};
 
+fn snapshot_tokens(source: &str) -> String {
+    let tokens = tokenize(source).expect("tokenize failed");
+    tokens
+        .iter()
+        .map(|s| format!("{:>4}..{:<4} {:?}", s.span.start, s.span.end, s.node))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[test]
+fn snapshot_signal_declarations() {
+    insta::assert_snapshot!(snapshot_tokens(
+        "signal counter: UInt<8>\nsignal offset: SInt<16> @ sys_clk\nsignal enable: Bool"
+    ));
+}
+
+#[test]
+fn snapshot_comb_block() {
+    insta::assert_snapshot!(snapshot_tokens(
+        "comb:\n    match opcode:\n        ADD => result = a + b\n        SUB => result = a - b\n    zero = result == 0"
+    ));
+}
+
+#[test]
+fn snapshot_reg_block() {
+    insta::assert_snapshot!(snapshot_tokens(
+        "reg(clk, rst):\n    on reset:\n        counter = 0\n    on tick:\n        if enable:\n            counter = counter + 1"
+    ));
+}
+
+#[test]
+fn snapshot_pipe_operator() {
+    insta::assert_snapshot!(snapshot_tokens(
+        "comb:\n    result = raw_adc\n        |> sign_extend(to=16)\n        |> scale(factor=3)"
+    ));
+}
+
 fn token_types(source: &str) -> Vec<Token> {
     lex(source)
         .expect("lex failed")

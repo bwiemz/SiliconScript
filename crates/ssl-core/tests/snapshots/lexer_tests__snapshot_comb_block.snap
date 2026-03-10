@@ -1,0 +1,36 @@
+---
+source: crates/ssl-core/tests/lexer_tests.rs
+expression: "snapshot_tokens(\"comb:\\n    match opcode:\\n        ADD => result = a + b\\n        SUB => result = a - b\\n    zero = result == 0\")"
+---
+   0..4    KwComb
+   4..5    Colon
+   5..6    Newline
+   6..10   Indent
+  10..15   KwMatch
+  16..22   Ident
+  22..23   Colon
+  23..24   Newline
+  24..32   Indent
+  32..35   Ident
+  36..38   FatArrow
+  39..45   Ident
+  46..47   Eq
+  48..49   Ident
+  50..51   Plus
+  52..53   Ident
+  53..54   Newline
+  62..65   Ident
+  66..68   FatArrow
+  69..75   Ident
+  76..77   Eq
+  78..79   Ident
+  80..81   Minus
+  82..83   Ident
+  83..84   Newline
+  84..88   Dedent
+  88..92   Ident
+  93..94   Eq
+  95..101  Ident
+ 102..104  EqEq
+ 105..106  Numeric(Decimal(0))
+ 106..106  Dedent
