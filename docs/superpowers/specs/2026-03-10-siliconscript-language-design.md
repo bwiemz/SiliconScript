@@ -234,7 +234,7 @@ HardwareType
  │   ├─ UInt<N>             // unsigned integer, N bits
  │   ├─ SInt<N>             // signed integer (2's complement), N bits
  │   └─ Fixed<I, F>         // fixed-point: I integer + F fractional = I+F bits
- ├─ Bool                    // single bit (alias: UInt<1>)
+ ├─ Bool                    // single bit (distinct type, coerces with UInt<1>)
  ├─ Clock<freq>             // clock signal with frequency annotation
  ├─ Reset
  │   ├─ SyncReset           // synchronous reset
@@ -243,10 +243,11 @@ HardwareType
  ├─ Struct                  // user-defined record (flattens to Bits)
  └─ Array<T, N>             // fixed-size array of hardware type
 
-MetaType (compile-time only)
+MetaType (compile-time only, not synthesized)
  ├─ uint                    // compile-time unsigned integer
  ├─ int                     // compile-time signed integer
  ├─ bool                    // compile-time boolean
+ ├─ float                   // compile-time IEEE 754 f64 (for gen_table math only)
  ├─ string                  // compile-time string
  └─ type                    // type-of-type (for generic type params)
 
@@ -811,18 +812,29 @@ signal b: Array<UInt<8>, 32>   // explicit form (allowed)
 
 ### A.4 `cdc()` Formal Signature
 
+`cdc()` has two overloaded forms based on the CDC method:
+
+**Standard form** (for `two_ff_sync`, `gray_code`, `handshake`, `pulse_sync`):
 ```
 cdc<T: type>(
     signal:  T @ DOMAIN_A,
     from:    Domain,
     to:      Domain,
-    method:  CdcMethod
+    method:  two_ff_sync | gray_code | handshake | pulse_sync
 ) -> T @ DOMAIN_B
 ```
 
-Where `CdcMethod` is one of: `two_ff_sync`, `gray_code`, `async_fifo<depth=N>`, `handshake`, `pulse_sync`. These are enum-like values passed to the `method` parameter, not standalone functions.
+**Stream form** (for `async_fifo` only):
+```
+cdc<T: type>(
+    signal:  Flip<Stream<T>> @ DOMAIN_A,
+    from:    Domain,
+    to:      Domain,
+    method:  async_fifo<depth = N>
+) -> Stream<T> @ DOMAIN_B
+```
 
-For `async_fifo`, the input and output are `Stream<T>` types (valid/ready handshake is part of the FIFO).
+The `async_fifo` variant accepts a `Stream` input and produces a `Stream` output because the FIFO inherently requires valid/ready backpressure on both sides. The compiler selects the correct overload based on the `method` parameter.
 
 ### A.5 `fn` — Pure Combinational Functions
 
