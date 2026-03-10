@@ -194,6 +194,64 @@ Rules:
 - `_ --> _` with a condition remains a self-loop (existing Section 6.2 behavior)
 - Multiple global transitions are allowed; prioritized in declaration order
 
+### Addendum A.33 — Interface Binding Operator `<->`
+
+Module instantiation uses three binding operators:
+
+| Operator | Direction | Use case |
+|---|---|---|
+| `=` | Input (caller drives) | `a = my_signal` |
+| `->` | Output (callee drives) | `result -> my_result` |
+| `<->` | Bidirectional (interface or inout) | `bus <-> my_axi_bus` |
+
+```
+inst target = AXI4LiteTarget<32, 32>(
+    clk = clk,
+    rst = rst,
+    bus <-> my_axi_bus,
+    reg_read_data = my_read_data,
+    reg_addr -> addr_out
+)
+```
+
+`<->` is required for any port whose type contains both `In` and `Out` directions (interfaces) or `InOut` (tristate). Using `=` or `->` on a bidirectional port is a compile error. Using `<->` on a unidirectional port is also a compile error.
+
+### Addendum A.34 — `string` and `float` in Generic `KIND` Grammar
+
+The `KIND` production in Section 3.1 is updated to include all compile-time MetaTypes:
+
+```
+KIND := uint | int | bool | float | string | type
+```
+
+This aligns with Section 2.1's MetaType hierarchy. All six compile-time types are valid as generic parameter kinds.
+
+### Addendum A.35 — Dynamic Out-of-Bounds Array Access
+
+When an array is accessed with a dynamic index that exceeds the array bounds:
+
+- **Out-of-bounds read:** returns zero (all bits `0`)
+- **Out-of-bounds write:** silently ignored (no effect on stored data)
+- **Static out-of-bounds:** compile error (constant index exceeds bounds)
+- **Dynamic out-of-bounds:** the compiler inserts a bounds-check mux. For power-of-2 sized arrays, the index naturally wraps via bit truncation (no extra logic needed). For non-power-of-2, the compiler inserts a comparator + zero-mux.
+
+No undefined behavior, no X propagation. Deterministic and synthesis-friendly.
+
+### Addendum A.36 — `implies` Operator Precedence
+
+Full boolean/formal operator precedence (highest to lowest):
+
+| Precedence | Operator | Associativity |
+|---|---|---|
+| 1 (highest) | `not` | Unary |
+| 2 | `and` | Left |
+| 3 | `or` | Left |
+| 4 (lowest) | `implies` | Right |
+
+`implies` has the lowest precedence, ensuring the left-hand side is fully evaluated as a single antecedent. Right-associativity matches mathematical convention: `A implies B implies C` parses as `A implies (B implies C)`.
+
+Example: `req_valid and not busy implies eventually(resp_valid, depth=16)` parses as `(req_valid and (not busy)) implies (eventually(resp_valid, depth=16))`.
+
 ---
 
 ## Section 8 — Formal Verification
