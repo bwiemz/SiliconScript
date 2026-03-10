@@ -1,4 +1,4 @@
-use ssl_core::lexer::{lex, Token, NumericLiteral, NumericBase};
+use ssl_core::lexer::{lex, tokenize, Token, NumericLiteral, NumericBase};
 
 fn token_types(source: &str) -> Vec<Token> {
     lex(source)
@@ -199,4 +199,42 @@ fn doc_comment() {
         .map(|s| s.node)
         .collect();
     assert!(raw.contains(&Token::DocComment));
+}
+
+// ── Task 8: full tokenize() pipeline tests ──────────────────────────────────
+
+#[test]
+fn full_pipeline_module() {
+    let source = "module ALU(\n    in  a: UInt,\n    out b: UInt\n):\n    comb:\n        b = a\n";
+    let tokens = tokenize(source).expect("tokenize failed");
+    let types: Vec<Token> = tokens.iter().map(|s| s.node.clone()).collect();
+    assert!(types.contains(&Token::Indent));
+    assert!(!types.contains(&Token::LineComment));
+    assert!(!types.contains(&Token::BlockComment));
+}
+
+#[test]
+fn full_pipeline_comments_stripped() {
+    let source = "signal x // comment\n/* block */\nsignal y";
+    let tokens = tokenize(source).expect("tokenize failed");
+    let types: Vec<Token> = tokens.iter().map(|s| s.node.clone()).collect();
+    assert!(!types.contains(&Token::LineComment));
+    assert!(!types.contains(&Token::BlockComment));
+    assert_eq!(types.iter().filter(|t| **t == Token::KwSignal).count(), 2);
+}
+
+#[test]
+fn full_pipeline_doc_comments_preserved() {
+    let source = "/// doc\nmodule Foo";
+    let tokens = tokenize(source).expect("tokenize failed");
+    let types: Vec<Token> = tokens.iter().map(|s| s.node.clone()).collect();
+    assert!(types.contains(&Token::DocComment));
+}
+
+#[test]
+fn blank_lines_dont_affect_indent() {
+    let source = "comb:\n    x = y\n\n    z = w";
+    let tokens = tokenize(source).expect("tokenize failed");
+    let types: Vec<Token> = tokens.iter().map(|s| s.node.clone()).collect();
+    assert_eq!(types.iter().filter(|t| **t == Token::Indent).count(), 1);
 }
