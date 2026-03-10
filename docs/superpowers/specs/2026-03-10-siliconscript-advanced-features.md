@@ -92,6 +92,108 @@ Clamps `val` to `[min, max]`. Synthesis-friendly — lowers to comparators and m
 output = acc |> relu() |> arithmetic_shift_right(16) |> saturate(min=-128, max=127) |> truncate<8>()
 ```
 
+### Addendum A.27 — Memory `read_latency` Parameter
+
+The `Memory` primitive requires an explicit `read_latency` parameter to prevent accidental synthesis of massive LUT-based asynchronous memories:
+
+```
+signal mem: Memory<UInt<32>, depth=65536, read_latency=1>   // BRAM — sync read only
+signal lut_mem: Memory<UInt<8>, depth=16, read_latency=0>   // LUTRAM — async read OK
+```
+
+Rules:
+- `read_latency=0` — combinational read, allowed in `comb` blocks. Compiler warns if `depth > 64`.
+- `read_latency=1` — registered read, requires `reg` block. Calling `.read()` in a `comb` block is a **compile error**.
+- If `read_latency` is omitted, the compiler infers from `@use_resource` and context. If ambiguous, compile error.
+- Compiler emits a hard error if `depth > 256` and `read_latency=0` without explicit `@use_resource(LUT)`.
+
+This supersedes the implicit context-based inference described in Appendix A.16 of the foundation spec.
+
+### Addendum A.28 — Pipeline Backpressure Signal Mapping
+
+When `backpressure=auto` is specified, the compiler needs to identify handshake signals. If the input/output types implement `Stream<T>` (have `.valid` and `.ready` fields), auto-detection works. For custom interfaces with different naming:
+
+```
+pipeline proc(clk, rst, backpressure=auto(valid=tvalid, ready=tready)):
+    input: axi_stream_in
+    output: axi_stream_out
+```
+
+If `backpressure=auto` is specified and the compiler cannot find or map handshake signals, it is a compile error.
+
+### Addendum A.29 — Partial Struct Assignment in `comb` Blocks
+
+Partial assignments to compound types (structs, arrays, interfaces) in a `comb` block require the entire structure to be assigned a default value first. Assigning only some fields without a preceding whole-struct default triggers the latch-inference compile error per Section 5.1.
+
+```
+// CORRECT — default first, then partial override
+comb:
+    px = Pixel(r=0, g=0, b=0, a=0)
+    if condition:
+        px.r = 0xFF                         // safe — other fields have defaults
+
+// COMPILE ERROR — partial assignment without default
+comb:
+    if condition:
+        px.r = 0xFF                         // error: px.g, px.b, px.a not assigned on all paths
+```
+
+### Addendum A.30 — ISA `override` Keyword
+
+When extending an ISA, the `override` keyword allows shadowing a parent instruction's encoding:
+
+```
+isa SecureExt extends RV32I:
+    override instr ECALL(rs1: Reg, rs2: Reg):
+        group: SYSTEM
+        funct3: 0b000
+        semantics: secure_trap(rs1, rs2)
+```
+
+Rules:
+- `override` suppresses the encoding conflict error for that specific instruction
+- The parent's definition is shadowed — only the child's version exists in the merged namespace
+- Without `override`, encoding overlap remains a compile error
+- `override` can only shadow an instruction with the same name in the parent
+
+`override` is added to the reserved keyword list.
+
+### Addendum A.31 — `Bool` ↔ `UInt<1>` Explicit Conversion (Correction)
+
+**This corrects Appendix A.1 in the foundation spec.** `Bool` and `UInt<1>` are distinct types with **no implicit coercion**. Explicit conversion is required:
+
+- `Bool` → `UInt<1>`: `.as_uint()`
+- `UInt<1>` → `Bool`: `.as_bool()`
+- `Bool` has logical operators (`and`, `or`, `not`); `UInt<1>` has bitwise operators (`&`, `|`, `~`)
+- Comparison operators (`==`, `!=`, `<`, etc.) return `Bool`
+- Reduction operators (`.or_reduce()`, `.and_reduce()`) return `Bool`
+- Integer literals `0` and `1` can still be used where `Bool` is expected (special case for readability)
+
+The implicit conversion entry in Section 2.7 ("Bool ↔ UInt<1>") is removed. This aligns with SSL's conservative "no implicit conversions" philosophy.
+
+### Addendum A.32 — Global FSM Transitions
+
+The `_` wildcard can be used as a **source state** to create global transitions that apply from any state:
+
+```
+transitions:
+    Idle --(start)--> Running
+    Running --(done)--> Idle
+
+    // Global abort: any state → Fault
+    _ --(fatal_error)--> Fault:
+        error_code = 0xFF
+
+    // Global reset: any state → Idle
+    _ --(soft_reset)--> Idle
+```
+
+Rules:
+- `_ --> TargetState` means "from any state" — the compiler expands to one transition per state
+- Global transitions have lowest priority — explicit per-state transitions always win
+- `_ --> _` with a condition remains a self-loop (existing Section 6.2 behavior)
+- Multiple global transitions are allowed; prioritized in declaration order
+
 ---
 
 ## Section 8 — Formal Verification
@@ -2607,6 +2709,6 @@ All reserved keywords across Sections 1–15:
 `systolic`, `dataflow`
 
 **ISA:**
-`isa`, `instr`, `format`, `registers`, `encoding_width`
+`isa`, `instr`, `format`, `registers`, `encoding_width`, `override`
 
-**Total: 82 reserved keywords**
+**Total: 83 reserved keywords**
