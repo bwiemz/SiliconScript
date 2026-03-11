@@ -13,13 +13,20 @@ impl<'src> Parser<'src> {
     pub fn parse_item(&mut self) -> Result<Item, ParseError> {
         let start = self.peek_span();
 
-        // Collect leading doc comments
+        // Collect leading doc comment (only the last contiguous one is kept)
         let mut doc: Option<DocComment> = None;
-        while self.check(Token::DocComment) {
+        if self.check(Token::DocComment) {
             let tok = self.advance();
-            let text = self.text(tok.span).to_string();
-            doc = Some(DocComment { text, span: tok.span });
+            let mut text = self.text(tok.span).to_string();
+            let first_span = tok.span;
             self.skip_newlines();
+            while self.check(Token::DocComment) {
+                let tok = self.advance();
+                text.push('\n');
+                text.push_str(self.text(tok.span));
+                self.skip_newlines();
+            }
+            doc = Some(DocComment { text, span: first_span.merge(self.prev_span()) });
         }
 
         // Collect leading attributes
@@ -36,10 +43,30 @@ impl<'src> Parser<'src> {
             Some(Token::KwModule) => {
                 ItemKind::Module(self.parse_module_def(doc.take(), attrs.drain(..).collect(), public)?)
             }
-            Some(Token::KwStruct) => ItemKind::Struct(self.parse_struct_def(doc.take())?),
-            Some(Token::KwEnum) => ItemKind::Enum(self.parse_enum_def(doc.take())?),
-            Some(Token::KwInterface) => ItemKind::Interface(self.parse_interface_def(doc.take())?),
-            Some(Token::KwFn) => ItemKind::FnDef(self.parse_fn_def(doc.take())?),
+            Some(Token::KwStruct) => {
+                if !attrs.is_empty() {
+                    return Err(ParseError { message: "attributes are not supported on struct definitions".into(), span: attrs[0].span });
+                }
+                ItemKind::Struct(self.parse_struct_def(doc.take())?)
+            }
+            Some(Token::KwEnum) => {
+                if !attrs.is_empty() {
+                    return Err(ParseError { message: "attributes are not supported on enum definitions".into(), span: attrs[0].span });
+                }
+                ItemKind::Enum(self.parse_enum_def(doc.take())?)
+            }
+            Some(Token::KwInterface) => {
+                if !attrs.is_empty() {
+                    return Err(ParseError { message: "attributes are not supported on interface definitions".into(), span: attrs[0].span });
+                }
+                ItemKind::Interface(self.parse_interface_def(doc.take())?)
+            }
+            Some(Token::KwFn) => {
+                if !attrs.is_empty() {
+                    return Err(ParseError { message: "attributes are not supported on fn definitions".into(), span: attrs[0].span });
+                }
+                ItemKind::FnDef(self.parse_fn_def(doc.take())?)
+            }
             Some(Token::KwFsm) => return Err(self.error("FSM parsing not yet implemented")),
             Some(Token::KwPipeline) => return Err(self.error("pipeline parsing not yet implemented")),
             Some(Token::KwTest) => return Err(self.error("test block parsing not yet implemented")),
