@@ -179,7 +179,7 @@ impl<'src> Parser<'src> {
         let mut items = Vec::new();
         parser.skip_newlines();
         while !parser.is_at_end() {
-            items.push(item::parse_item(&mut parser)?);
+            items.push(parser.parse_item()?);
             parser.skip_newlines();
         }
         Ok(SourceFile { items })

@@ -8,6 +8,7 @@ use ssl_core::ast::types::{TypeExprKind, Direction};
 use ssl_core::parser::types::{parse_type_expr, parse_type_expr_with_domain};
 use ssl_core::ast::stmt::StmtKind;
 use ssl_core::parser::stmt::parse_stmt;
+use ssl_core::ast::item::*;
 
 fn s(start: u32, end: u32) -> Span {
     Span::new(start, end)
@@ -1020,5 +1021,85 @@ fn block_assume_with_domain() {
             assert!(message.is_none());
         }
         _ => panic!("expected Assume"),
+    }
+}
+
+fn parse_one_item(src: &str) -> Item {
+    let tokens = ssl_core::lexer::tokenize(src).expect("lexer failed");
+    let mut p = Parser::new(src, tokens);
+    p.parse_item().expect("parse error")
+}
+
+#[test]
+fn item_module_with_ports() {
+    let src = "module Adder(in a: UInt<8>, in b: UInt<8>, out sum: UInt<9>):\n  signal c: UInt<9>\n";
+    let item = parse_one_item(src);
+    match &item.node {
+        ItemKind::Module(m) => {
+            assert_eq!(m.name.node, "Adder");
+            assert_eq!(m.ports.len(), 3);
+            assert_eq!(m.ports[0].direction, Direction::In);
+            assert_eq!(m.ports[0].name.node, "a");
+            assert_eq!(m.ports[2].direction, Direction::Out);
+            assert_eq!(m.body.len(), 1);
+        }
+        other => panic!("expected Module, got {:?}", other),
+    }
+}
+
+#[test]
+fn item_struct_with_fields() {
+    let src = "struct Packet:\n  header: UInt<8>\n  payload: UInt<32>\n";
+    match &parse_one_item(src).node {
+        ItemKind::Struct(s) => {
+            assert_eq!(s.name.node, "Packet");
+            assert_eq!(s.fields.len(), 2);
+            assert_eq!(s.fields[0].name.node, "header");
+        }
+        other => panic!("expected Struct, got {:?}", other),
+    }
+}
+
+#[test]
+fn item_enum_with_encoding() {
+    let src = "enum State [onehot]:\n  Idle\n  Run\n  Done\n";
+    match &parse_one_item(src).node {
+        ItemKind::Enum(e) => {
+            assert_eq!(e.name.node, "State");
+            assert_eq!(e.encoding, Some(EnumEncoding::Onehot));
+            assert_eq!(e.variants.len(), 3);
+            assert_eq!(e.variants[0].name.node, "Idle");
+        }
+        other => panic!("expected Enum, got {:?}", other),
+    }
+}
+
+#[test]
+fn item_interface_with_group() {
+    let src = "interface AXI:\n  group write:\n    addr: UInt<32>\n    data: UInt<64>\n  ready: Bool\n";
+    match &parse_one_item(src).node {
+        ItemKind::Interface(i) => {
+            assert_eq!(i.name.node, "AXI");
+            assert_eq!(i.groups.len(), 1);
+            assert_eq!(i.groups[0].name.node, "write");
+            assert_eq!(i.groups[0].signals.len(), 2);
+            assert_eq!(i.signals.len(), 1);
+            assert_eq!(i.signals[0].name.node, "ready");
+        }
+        other => panic!("expected Interface, got {:?}", other),
+    }
+}
+
+#[test]
+fn item_fn_definition() {
+    let src = "fn add(a: UInt<8>, b: UInt<8>) -> UInt<9>:\n  let c = a + b\n";
+    match &parse_one_item(src).node {
+        ItemKind::FnDef(f) => {
+            assert_eq!(f.name.node, "add");
+            assert_eq!(f.params.len(), 2);
+            assert_eq!(f.params[0].name.node, "a");
+            assert_eq!(f.body.len(), 1);
+        }
+        other => panic!("expected FnDef, got {:?}", other),
     }
 }
