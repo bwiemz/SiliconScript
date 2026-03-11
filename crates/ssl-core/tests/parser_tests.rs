@@ -1103,3 +1103,113 @@ fn item_fn_definition() {
         other => panic!("expected FnDef, got {:?}", other),
     }
 }
+
+#[test]
+fn item_fsm_with_transitions() {
+    let src = "fsm Controller(clk, rst):\n  states: Idle | Run | Done\n  encoding: onehot\n  initial: Idle\n  transitions:\n    Idle --(start)--> Run\n    Run --timeout(100)--> Done\n  outputs:\n    Idle => busy = 0\n    Run => busy = 1\n";
+    match &parse_one_item(src).node {
+        ItemKind::Fsm(f) => {
+            assert_eq!(f.name.node, "Controller");
+            assert_eq!(f.states.len(), 3);
+            assert_eq!(f.encoding, Some(EnumEncoding::Onehot));
+            assert_eq!(f.initial.node, "Idle");
+            assert_eq!(f.transitions.len(), 2);
+            assert!(matches!(f.transitions[0].condition, FsmCondition::Expr(_)));
+            assert!(matches!(f.transitions[1].condition, FsmCondition::Timeout(_)));
+            assert_eq!(f.outputs.len(), 2);
+        }
+        other => panic!("expected Fsm, got {:?}", other),
+    }
+}
+
+#[test]
+fn item_pipeline_with_stages() {
+    let src = "pipeline DataPipe(clk, rst, backpressure=none):\n  input: a, b\n  output: result\n  stage 0 \"fetch\":\n    let sum = a + b\n  stage 1:\n    result = sum\n";
+    match &parse_one_item(src).node {
+        ItemKind::Pipeline(p) => {
+            assert_eq!(p.name.node, "DataPipe");
+            assert!(matches!(p.backpressure, BackpressureMode::None));
+            assert_eq!(p.input.bindings.len(), 2);
+            assert_eq!(p.stages.len(), 2);
+            assert_eq!(p.stages[0].label, Some("fetch".to_string()));
+        }
+        other => panic!("expected Pipeline, got {:?}", other),
+    }
+}
+
+#[test]
+fn item_test_block() {
+    let src = "test \"adder works\":\n  let x = 1\n";
+    match &parse_one_item(src).node {
+        ItemKind::Test(t) => {
+            assert_eq!(t.name, "adder works");
+            assert_eq!(t.body.len(), 1);
+        }
+        other => panic!("expected Test, got {:?}", other),
+    }
+}
+
+#[test]
+fn item_import_single() {
+    let src = "import Utils from \"./utils.ssl\"\n";
+    match &parse_one_item(src).node {
+        ItemKind::Import(i) => {
+            assert_eq!(i.names[0].node, "Utils");
+            assert_eq!(i.path, "./utils.ssl");
+        }
+        other => panic!("expected Import, got {:?}", other),
+    }
+}
+
+#[test]
+fn item_import_destructured() {
+    let src = "import { Adder, Mux } from \"components.ssl\"\n";
+    match &parse_one_item(src).node {
+        ItemKind::Import(i) => {
+            assert_eq!(i.names.len(), 2);
+            assert_eq!(i.names[0].node, "Adder");
+        }
+        other => panic!("expected Import, got {:?}", other),
+    }
+}
+
+#[test]
+fn item_extern_module() {
+    let src = "extern module BRAM(in addr: UInt<16>, out data: UInt<32>) @ verilog(\"bram_ip\")\n";
+    match &parse_one_item(src).node {
+        ItemKind::ExternModule(e) => {
+            assert_eq!(e.name.node, "BRAM");
+            assert_eq!(e.ports.len(), 2);
+            assert_eq!(e.backend, "verilog");
+        }
+        other => panic!("expected ExternModule, got {:?}", other),
+    }
+}
+
+#[test]
+fn item_inst_with_mixed_bindings() {
+    let src = "inst my_add = Adder<8>(a = x, b = y, sum -> result, carry -> _)\n";
+    match &parse_one_item(src).node {
+        ItemKind::Inst(i) => {
+            assert_eq!(i.name.node, "my_add");
+            assert_eq!(i.module_name.node, "Adder");
+            assert_eq!(i.generic_args.len(), 1);
+            assert_eq!(i.connections.len(), 4);
+            assert!(matches!(i.connections[0].binding, PortBinding::Input(_)));
+            assert!(matches!(i.connections[3].binding, PortBinding::Discard));
+        }
+        other => panic!("expected Inst, got {:?}", other),
+    }
+}
+
+#[test]
+fn item_gen_for() {
+    let src = "gen for i in 0..4:\n  signal s: UInt<8>\n";
+    match &parse_one_item(src).node {
+        ItemKind::GenFor(g) => {
+            assert_eq!(g.var.node, "i");
+            assert_eq!(g.body.len(), 1);
+        }
+        other => panic!("expected GenFor, got {:?}", other),
+    }
+}

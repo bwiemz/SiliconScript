@@ -1,9 +1,9 @@
 use crate::ast::item::*;
-use crate::ast::{Attribute, DocComment};
+use crate::ast::{Attribute, DocComment, Ident};
 use crate::ast::types::Direction;
 use crate::lexer::Token;
 use crate::span::Spanned;
-use super::expr::parse_expr;
+use super::expr::{parse_expr, parse_expr_in_generic};
 use super::stmt::parse_stmt;
 use super::types::{parse_generic_params, parse_type_expr, parse_type_expr_with_domain};
 use super::{ParseError, Parser};
@@ -67,13 +67,13 @@ impl<'src> Parser<'src> {
                 }
                 ItemKind::FnDef(self.parse_fn_def(doc.take())?)
             }
-            Some(Token::KwFsm) => return Err(self.error("FSM parsing not yet implemented")),
-            Some(Token::KwPipeline) => return Err(self.error("pipeline parsing not yet implemented")),
-            Some(Token::KwTest) => return Err(self.error("test block parsing not yet implemented")),
-            Some(Token::KwImport) => return Err(self.error("import parsing not yet implemented")),
-            Some(Token::KwExtern) => return Err(self.error("extern module parsing not yet implemented")),
-            Some(Token::KwInst) => return Err(self.error("inst parsing not yet implemented")),
-            Some(Token::KwGen) => return Err(self.error("gen parsing not yet implemented")),
+            Some(Token::KwFsm) => self.parse_fsm_def()?,
+            Some(Token::KwPipeline) => self.parse_pipeline_def()?,
+            Some(Token::KwTest) => ItemKind::Test(self.parse_test_block()?),
+            Some(Token::KwImport) => ItemKind::Import(self.parse_import()?),
+            Some(Token::KwExtern) => ItemKind::ExternModule(self.parse_extern_module()?),
+            Some(Token::KwInst) => ItemKind::Inst(self.parse_inst_decl()?),
+            Some(Token::KwGen) => self.parse_gen()?,
             _ => {
                 // Fall back to statement
                 let stmt = parse_stmt(self)?;
@@ -364,5 +364,360 @@ impl<'src> Parser<'src> {
             return_type,
             body,
         })
+    }
+
+    /// Parse FSM definition with states, transitions, outputs.
+    fn parse_fsm_def(&mut self) -> Result<ItemKind, ParseError> {
+        self.expect_token(Token::KwFsm)?;
+        let name = self.expect_ident()?;
+        self.expect_token(Token::LParen)?;
+        let clock = parse_expr(self)?;
+        self.expect_token(Token::Comma)?;
+        let reset = parse_expr(self)?;
+        self.expect_token(Token::RParen)?;
+        self.expect_token(Token::Colon)?;
+        self.skip_newlines();
+        self.expect_token(Token::Indent)?;
+
+        let mut states = Vec::new();
+        let mut encoding = None;
+        let mut initial: Option<Ident> = None;
+        let mut transitions = Vec::new();
+        let mut on_tick: Option<Vec<crate::ast::stmt::Stmt>> = None;
+        let mut outputs = Vec::new();
+
+        while !self.check(Token::Dedent) && !self.is_at_end() {
+            self.skip_newlines();
+            if self.check(Token::Dedent) || self.is_at_end() { break; }
+
+            // Handle `on tick:` — `on` is Token::KwOn keyword
+            if self.check(Token::KwOn) {
+                self.advance();
+                if !self.check(Token::KwTick) {
+                    return Err(self.error("expected 'tick' after 'on'"));
+                }
+                self.advance();
+                on_tick = Some(self.parse_block(|p| parse_stmt(p))?);
+                self.skip_newlines();
+                continue;
+            }
+
+            let label = self.expect_ident()?;
+            match label.node.as_str() {
+                "states" => {
+                    self.expect_token(Token::Colon)?;
+                    states.push(self.expect_ident()?);
+                    while self.eat(Token::Pipe).is_some() {
+                        states.push(self.expect_ident()?);
+                    }
+                }
+                "encoding" => {
+                    self.expect_token(Token::Colon)?;
+                    let enc_name = self.expect_ident()?;
+                    encoding = Some(match enc_name.node.as_str() {
+                        "binary" => EnumEncoding::Binary,
+                        "onehot" => EnumEncoding::Onehot,
+                        "gray" => EnumEncoding::Gray,
+                        "custom" => EnumEncoding::Custom,
+                        _ => return Err(ParseError {
+                            message: format!("expected fsm encoding, found '{}'", enc_name.node),
+                            span: enc_name.span,
+                        }),
+                    });
+                }
+                "initial" => {
+                    self.expect_token(Token::Colon)?;
+                    initial = Some(self.expect_ident()?);
+                }
+                "transitions" => {
+                    let trans = self.parse_block(|p| p.parse_fsm_transition())?;
+                    transitions = trans;
+                }
+                "outputs" => {
+                    outputs = self.parse_block(|p| {
+                        let out_start = p.peek_span();
+                        let state = p.expect_ident()?;
+                        p.expect_token(Token::FatArrow)?;
+                        let assignments = vec![parse_stmt(p)?];
+                        Ok(FsmOutput { state, assignments, span: out_start.merge(p.prev_span()) })
+                    })?;
+                }
+                _ => return Err(ParseError {
+                    message: format!("unexpected fsm section '{}'", label.node),
+                    span: label.span,
+                }),
+            }
+            self.skip_newlines();
+        }
+        self.expect_token(Token::Dedent)?;
+        let init = initial.ok_or_else(|| self.error("fsm missing 'initial' state"))?;
+        Ok(ItemKind::Fsm(FsmDef { name, clock, reset, states, encoding, initial: init, transitions, on_tick, outputs }))
+    }
+
+    fn parse_fsm_transition(&mut self) -> Result<FsmTransition, ParseError> {
+        let start = self.peek_span();
+        let from = if self.eat(Token::Underscore).is_some() {
+            FsmStateRef::Wildcard(self.prev_span())
+        } else { FsmStateRef::Named(self.expect_ident()?) };
+        self.expect_token(Token::DashDash)?;
+        let condition = if self.check(Token::KwIn) {
+            // Not a timeout — fall through to expr
+            self.expect_token(Token::LParen)?;
+            let expr = parse_expr(self)?;
+            self.expect_token(Token::RParen)?;
+            FsmCondition::Expr(expr)
+        } else if self.check_ident() && self.text(self.peek_span()) == "timeout" {
+            self.advance();
+            self.expect_token(Token::LParen)?;
+            let expr = parse_expr(self)?;
+            self.expect_token(Token::RParen)?;
+            FsmCondition::Timeout(expr)
+        } else {
+            self.expect_token(Token::LParen)?;
+            let expr = parse_expr(self)?;
+            self.expect_token(Token::RParen)?;
+            FsmCondition::Expr(expr)
+        };
+        self.expect_token(Token::LongArrow)?;
+        let to = if self.eat(Token::Underscore).is_some() {
+            FsmStateRef::Wildcard(self.prev_span())
+        } else { FsmStateRef::Named(self.expect_ident()?) };
+        let actions = if self.eat(Token::Colon).is_some() {
+            if self.check(Token::Newline) || self.check(Token::Indent) {
+                self.skip_newlines();
+                if self.check(Token::Indent) {
+                    self.expect_token(Token::Indent)?;
+                    let mut stmts = Vec::new();
+                    while !self.check(Token::Dedent) && !self.is_at_end() {
+                        self.skip_newlines();
+                        if self.check(Token::Dedent) { break; }
+                        stmts.push(parse_stmt(self)?);
+                        self.skip_newlines();
+                    }
+                    self.expect_token(Token::Dedent)?;
+                    stmts
+                } else { vec![parse_stmt(self)?] }
+            } else { vec![parse_stmt(self)?] }
+        } else { Vec::new() };
+        Ok(FsmTransition { from, condition, to, actions, span: start.merge(self.prev_span()) })
+    }
+
+    fn parse_pipeline_def(&mut self) -> Result<ItemKind, ParseError> {
+        self.expect_token(Token::KwPipeline)?;
+        let name = self.expect_ident()?;
+        self.expect_token(Token::LParen)?;
+        let clock = parse_expr(self)?;
+        self.expect_token(Token::Comma)?;
+        let reset = parse_expr(self)?;
+        let backpressure = if self.eat(Token::Comma).is_some() {
+            let bp_name = self.expect_ident()?;
+            if bp_name.node != "backpressure" {
+                return Err(ParseError {
+                    message: format!("expected 'backpressure', found '{}'", bp_name.node),
+                    span: bp_name.span,
+                });
+            }
+            self.expect_token(Token::Eq)?;
+            let mode = self.expect_ident()?;
+            match mode.node.as_str() {
+                "auto" => BackpressureMode::Auto(Vec::new()),
+                "manual" => BackpressureMode::Manual,
+                "none" => BackpressureMode::None,
+                _ => return Err(ParseError {
+                    message: format!("expected backpressure mode, found '{}'", mode.node),
+                    span: mode.span,
+                }),
+            }
+        } else { BackpressureMode::Auto(Vec::new()) };
+        self.expect_token(Token::RParen)?;
+        self.expect_token(Token::Colon)?;
+        self.skip_newlines();
+        self.expect_token(Token::Indent)?;
+
+        let input = self.parse_pipeline_port("input")?;
+        self.skip_newlines();
+        let output = self.parse_pipeline_port("output")?;
+        self.skip_newlines();
+
+        let mut stages = Vec::new();
+        while !self.check(Token::Dedent) && !self.is_at_end() {
+            self.skip_newlines();
+            if self.check(Token::Dedent) || self.is_at_end() { break; }
+            stages.push(self.parse_pipeline_stage()?);
+            self.skip_newlines();
+        }
+        self.expect_token(Token::Dedent)?;
+        Ok(ItemKind::Pipeline(PipelineDef { name, clock, reset, backpressure, input, output, stages }))
+    }
+
+    fn parse_pipeline_port(&mut self, expected_label: &str) -> Result<PipelinePort, ParseError> {
+        let start = self.peek_span();
+        let label = self.expect_ident()?;
+        if label.node != expected_label {
+            return Err(ParseError {
+                message: format!("expected '{}', found '{}'", expected_label, label.node),
+                span: label.span,
+            });
+        }
+        self.expect_token(Token::Colon)?;
+        let mut bindings = vec![self.expect_ident()?];
+        while self.eat(Token::Comma).is_some() {
+            bindings.push(self.expect_ident()?);
+        }
+        Ok(PipelinePort { bindings, span: start.merge(self.prev_span()) })
+    }
+
+    fn parse_pipeline_stage(&mut self) -> Result<PipelineStage, ParseError> {
+        let start = self.peek_span();
+        // `stage` is a keyword token Token::KwStage
+        self.expect_token(Token::KwStage)?;
+        let index = parse_expr(self)?;
+        let label = if let Some(Token::StringLit(s)) = self.peek().cloned() {
+            self.advance();
+            Some(s)
+        } else {
+            None
+        };
+        self.expect_token(Token::Colon)?;
+        self.skip_newlines();
+        self.expect_token(Token::Indent)?;
+        let (mut stall_when, mut flush_when, mut body) = (None, None, Vec::new());
+        while !self.check(Token::Dedent) && !self.is_at_end() {
+            self.skip_newlines();
+            if self.check(Token::Dedent) || self.is_at_end() { break; }
+            if self.check_ident() {
+                let txt = self.text(self.peek_span()).to_string();
+                if txt == "stall_when" || txt == "flush_when" {
+                    self.advance();
+                    self.expect_token(Token::Colon)?;
+                    let expr = parse_expr(self)?;
+                    if txt == "stall_when" { stall_when = Some(expr); } else { flush_when = Some(expr); }
+                    self.skip_newlines();
+                    continue;
+                }
+            }
+            body.push(parse_stmt(self)?);
+            self.skip_newlines();
+        }
+        self.expect_token(Token::Dedent)?;
+        Ok(PipelineStage { index, label, stall_when, flush_when, body, span: start.merge(self.prev_span()) })
+    }
+
+    fn parse_test_block(&mut self) -> Result<TestBlock, ParseError> {
+        self.expect_token(Token::KwTest)?;
+        let name = match self.peek().cloned() {
+            Some(Token::StringLit(s)) => { self.advance(); s }
+            _ => return Err(self.error("expected test name string")),
+        };
+        let body = self.parse_block(|p| parse_stmt(p))?;
+        Ok(TestBlock { name, body })
+    }
+
+    fn parse_import(&mut self) -> Result<ImportStmt, ParseError> {
+        self.expect_token(Token::KwImport)?;
+        let names = if self.eat(Token::LBrace).is_some() {
+            self.parse_comma_list(Token::RBrace, |p| p.expect_ident())?
+        } else {
+            vec![self.expect_ident()?]
+        };
+        self.expect_token(Token::KwFrom)?;
+        let path = match self.peek().cloned() {
+            Some(Token::StringLit(s)) => { self.advance(); s }
+            _ => return Err(self.error("expected import path string")),
+        };
+        let alias = if self.eat(Token::KwAs).is_some() { Some(self.expect_ident()?) } else { None };
+        Ok(ImportStmt { names, path, alias })
+    }
+
+    fn parse_extern_module(&mut self) -> Result<ExternModuleDef, ParseError> {
+        self.expect_token(Token::KwExtern)?;
+        self.expect_token(Token::KwModule)?;
+        let name = self.expect_ident()?;
+        self.expect_token(Token::LParen)?;
+        let ports = self.parse_comma_list(Token::RParen, |p| p.parse_port())?;
+        self.expect_token(Token::At)?;
+        let backend = self.expect_ident()?.node;
+        self.expect_token(Token::LParen)?;
+        let backend_name = match self.peek().cloned() {
+            Some(Token::StringLit(s)) => { self.advance(); s }
+            _ => return Err(self.error("expected backend module name string")),
+        };
+        self.expect_token(Token::RParen)?;
+        Ok(ExternModuleDef { name, ports, backend, backend_name })
+    }
+
+    fn parse_inst_decl(&mut self) -> Result<InstDecl, ParseError> {
+        self.expect_token(Token::KwInst)?;
+        let name = self.expect_ident()?;
+        self.expect_token(Token::Eq)?;
+        let module_name = self.expect_ident()?;
+        let generic_args = if self.eat(Token::Less).is_some() {
+            self.parse_comma_list(Token::Greater, parse_expr_in_generic)?
+        } else { Vec::new() };
+        self.expect_token(Token::LParen)?;
+        let connections = self.parse_comma_list(Token::RParen, |p| {
+            let s = p.peek_span();
+            let port = p.expect_ident()?;
+            let binding = if p.eat(Token::Eq).is_some() {
+                if p.eat(Token::Underscore).is_some() {
+                    PortBinding::Discard
+                } else {
+                    PortBinding::Input(parse_expr(p)?)
+                }
+            } else if p.eat(Token::ThinArrow).is_some() {
+                if p.eat(Token::Underscore).is_some() {
+                    PortBinding::Discard
+                } else {
+                    PortBinding::Output(parse_expr(p)?)
+                }
+            } else if p.eat(Token::BiArrow).is_some() {
+                PortBinding::Bidirectional(parse_expr(p)?)
+            } else {
+                return Err(p.error("expected '=', '->', or '<->' in port connection"));
+            };
+            Ok(PortConnection { port, binding, span: s.merge(p.prev_span()) })
+        })?;
+        Ok(InstDecl { name, module_name, generic_args, connections })
+    }
+
+    fn parse_gen(&mut self) -> Result<ItemKind, ParseError> {
+        self.expect_token(Token::KwGen)?;
+        match self.peek().cloned() {
+            Some(Token::KwFor) => {
+                self.advance();
+                let var = self.expect_ident()?;
+                self.expect_token(Token::KwIn)?;
+                let iterable = parse_expr(self)?;
+                let body = self.parse_block(|p| p.parse_item())?;
+                Ok(ItemKind::GenFor(GenFor { var, iterable, body }))
+            }
+            Some(Token::KwIf) => {
+                self.advance();
+                let condition = parse_expr(self)?;
+                let then_body = self.parse_block(|p| p.parse_item())?;
+                let else_body = if self.check(Token::KwGen)
+                    && self.tokens.get(self.pos + 1).map(|t| &t.node) == Some(&Token::KwElse)
+                {
+                    self.advance(); // consume gen
+                    self.advance(); // consume else
+                    Some(self.parse_block(|p| p.parse_item())?)
+                } else {
+                    None
+                };
+                Ok(ItemKind::GenIf(GenIf { condition, then_body, else_body }))
+            }
+            _ => Err(self.error("expected 'for' or 'if' after 'gen'")),
+        }
+    }
+
+    /// Top-level: parse entire source file into a `SourceFile`.
+    pub fn parse_file(&mut self) -> Result<SourceFile, ParseError> {
+        let mut items = Vec::new();
+        self.skip_newlines();
+        while !self.is_at_end() {
+            items.push(self.parse_item()?);
+            self.skip_newlines();
+        }
+        Ok(SourceFile { items })
     }
 }
