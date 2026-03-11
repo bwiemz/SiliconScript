@@ -801,3 +801,224 @@ fn stmt_expr_stmt() {
 fn stmt_static_assert() {
     assert!(matches!(parse_one_stmt("static_assert WIDTH > 0, \"width must be positive\"").node, StmtKind::StaticAssert { .. }));
 }
+
+fn parse_stmt_tokens(source: &str, tokens: Vec<Spanned<Token>>) -> ssl_core::ast::stmt::Stmt {
+    let mut p = Parser::new(source, tokens);
+    parse_stmt(&mut p).expect("parse error")
+}
+
+#[test]
+fn block_if_simple() {
+    let s = "if x:\n    y = 1\n";
+    let t = vec![
+        tok(Token::KwIf, 0, 2), tok(Token::Ident, 3, 4), tok(Token::Colon, 4, 5),
+        tok(Token::Newline, 5, 6), tok(Token::Indent, 6, 6), tok(Token::Ident, 10, 11),
+        tok(Token::Eq, 12, 13), tok(Token::Numeric(NumericLiteral::Decimal(1)), 14, 15),
+        tok(Token::Newline, 15, 16), tok(Token::Dedent, 16, 16),
+    ];
+    match &parse_stmt_tokens(s, t).node {
+        StmtKind::If(i) => {
+            assert_eq!(i.then_body.len(), 1);
+            assert!(i.elif_branches.is_empty());
+            assert!(i.else_body.is_none());
+        }
+        _ => panic!("expected If"),
+    }
+}
+
+#[test]
+fn block_if_elif_else() {
+    let s = "if a:\n  x=1\nelif b:\n  x=2\nelse:\n  x=3\n";
+    let t = vec![
+        tok(Token::KwIf, 0, 2), tok(Token::Ident, 3, 4), tok(Token::Colon, 4, 5),
+        tok(Token::Newline, 5, 6), tok(Token::Indent, 6, 6),
+        tok(Token::Ident, 8, 9), tok(Token::Eq, 9, 10), tok(Token::Numeric(NumericLiteral::Decimal(1)), 10, 11),
+        tok(Token::Newline, 11, 12), tok(Token::Dedent, 12, 12),
+        tok(Token::KwElif, 12, 16), tok(Token::Ident, 17, 18), tok(Token::Colon, 18, 19),
+        tok(Token::Newline, 19, 20), tok(Token::Indent, 20, 20),
+        tok(Token::Ident, 22, 23), tok(Token::Eq, 23, 24), tok(Token::Numeric(NumericLiteral::Decimal(2)), 24, 25),
+        tok(Token::Newline, 25, 26), tok(Token::Dedent, 26, 26),
+        tok(Token::KwElse, 26, 30), tok(Token::Colon, 30, 31),
+        tok(Token::Newline, 31, 32), tok(Token::Indent, 32, 32),
+        tok(Token::Ident, 34, 35), tok(Token::Eq, 35, 36), tok(Token::Numeric(NumericLiteral::Decimal(3)), 36, 37),
+        tok(Token::Newline, 37, 38), tok(Token::Dedent, 38, 38),
+    ];
+    match &parse_stmt_tokens(s, t).node {
+        StmtKind::If(i) => {
+            assert_eq!(i.elif_branches.len(), 1);
+            assert!(i.else_body.is_some());
+        }
+        _ => panic!("expected If"),
+    }
+}
+
+#[test]
+fn block_match_two_arms() {
+    let s = "match st:\n  A=>x=0\n  B=>x=1\n";
+    let t = vec![
+        tok(Token::KwMatch, 0, 5), tok(Token::Ident, 6, 8), tok(Token::Colon, 8, 9),
+        tok(Token::Newline, 9, 10), tok(Token::Indent, 10, 10),
+        tok(Token::Ident, 12, 13), tok(Token::FatArrow, 13, 15),
+        tok(Token::Ident, 15, 16), tok(Token::Eq, 16, 17), tok(Token::Numeric(NumericLiteral::Decimal(0)), 17, 18),
+        tok(Token::Newline, 18, 19),
+        tok(Token::Ident, 21, 22), tok(Token::FatArrow, 22, 24),
+        tok(Token::Ident, 24, 25), tok(Token::Eq, 25, 26), tok(Token::Numeric(NumericLiteral::Decimal(1)), 26, 27),
+        tok(Token::Newline, 27, 28),
+        tok(Token::Dedent, 28, 28),
+    ];
+    match &parse_stmt_tokens(s, t).node {
+        StmtKind::Match(m) => assert_eq!(m.arms.len(), 2),
+        _ => panic!("expected Match"),
+    }
+}
+
+#[test]
+fn block_comb() {
+    let s = "comb:\n  x=a+b\n";
+    let t = vec![
+        tok(Token::KwComb, 0, 4), tok(Token::Colon, 4, 5),
+        tok(Token::Newline, 5, 6), tok(Token::Indent, 6, 6),
+        tok(Token::Ident, 8, 9), tok(Token::Eq, 9, 10),
+        tok(Token::Ident, 10, 11), tok(Token::Plus, 11, 12), tok(Token::Ident, 12, 13),
+        tok(Token::Newline, 13, 14), tok(Token::Dedent, 14, 14),
+    ];
+    match &parse_stmt_tokens(s, t).node {
+        StmtKind::CombBlock(v) => assert_eq!(v.len(), 1),
+        _ => panic!("expected CombBlock"),
+    }
+}
+
+#[test]
+fn block_reg_reset_tick() {
+    let s = "reg(c,r):\n on reset:\n  x=0\n on tick:\n  x=x+1\n";
+    let t = vec![
+        tok(Token::KwReg, 0, 3), tok(Token::LParen, 3, 4),
+        tok(Token::Ident, 4, 5), tok(Token::Comma, 5, 6), tok(Token::Ident, 6, 7),
+        tok(Token::RParen, 7, 8), tok(Token::Colon, 8, 9),
+        tok(Token::Newline, 9, 10), tok(Token::Indent, 10, 10),
+        tok(Token::KwOn, 11, 13), tok(Token::KwReset, 14, 19),
+        tok(Token::Colon, 19, 20), tok(Token::Newline, 20, 21), tok(Token::Indent, 21, 21),
+        tok(Token::Ident, 23, 24), tok(Token::Eq, 24, 25), tok(Token::Numeric(NumericLiteral::Decimal(0)), 25, 26),
+        tok(Token::Newline, 26, 27), tok(Token::Dedent, 27, 27),
+        tok(Token::KwOn, 28, 30), tok(Token::KwTick, 31, 35),
+        tok(Token::Colon, 35, 36), tok(Token::Newline, 36, 37), tok(Token::Indent, 37, 37),
+        tok(Token::Ident, 39, 40), tok(Token::Eq, 40, 41),
+        tok(Token::Ident, 41, 42), tok(Token::Plus, 42, 43), tok(Token::Numeric(NumericLiteral::Decimal(1)), 43, 44),
+        tok(Token::Newline, 44, 45), tok(Token::Dedent, 45, 45),
+        tok(Token::Dedent, 45, 45),
+    ];
+    match &parse_stmt_tokens(s, t).node {
+        StmtKind::RegBlock(r) => {
+            assert_eq!(r.on_reset.len(), 1);
+            assert_eq!(r.on_tick.len(), 1);
+            assert!(r.enable.is_none());
+        }
+        _ => panic!("expected RegBlock"),
+    }
+}
+
+#[test]
+fn block_priority() {
+    let s = "priority:\n when a=>x=1\n when b=>x=2\n otherwise=>x=0\n";
+    let t = vec![
+        tok(Token::KwPriority, 0, 8), tok(Token::Colon, 8, 9),
+        tok(Token::Newline, 9, 10), tok(Token::Indent, 10, 10),
+        tok(Token::KwWhen, 11, 15), tok(Token::Ident, 16, 17), tok(Token::FatArrow, 17, 19),
+        tok(Token::Ident, 19, 20), tok(Token::Eq, 20, 21), tok(Token::Numeric(NumericLiteral::Decimal(1)), 21, 22),
+        tok(Token::Newline, 22, 23),
+        tok(Token::KwWhen, 24, 28), tok(Token::Ident, 29, 30), tok(Token::FatArrow, 30, 32),
+        tok(Token::Ident, 32, 33), tok(Token::Eq, 33, 34), tok(Token::Numeric(NumericLiteral::Decimal(2)), 34, 35),
+        tok(Token::Newline, 35, 36),
+        tok(Token::KwOtherwise, 37, 46), tok(Token::FatArrow, 46, 48),
+        tok(Token::Ident, 48, 49), tok(Token::Eq, 49, 50), tok(Token::Numeric(NumericLiteral::Decimal(0)), 50, 51),
+        tok(Token::Newline, 51, 52),
+        tok(Token::Dedent, 52, 52),
+    ];
+    match &parse_stmt_tokens(s, t).node {
+        StmtKind::PriorityBlock(pb) => {
+            assert_eq!(pb.arms.len(), 2);
+            assert!(pb.otherwise.is_some());
+        }
+        _ => panic!("expected PriorityBlock"),
+    }
+}
+
+#[test]
+fn block_parallel() {
+    let s = "parallel:\n when a=>x=1\n when b=>x=2\n";
+    let t = vec![
+        tok(Token::KwParallel, 0, 8), tok(Token::Colon, 8, 9),
+        tok(Token::Newline, 9, 10), tok(Token::Indent, 10, 10),
+        tok(Token::KwWhen, 11, 15), tok(Token::Ident, 16, 17), tok(Token::FatArrow, 17, 19),
+        tok(Token::Ident, 19, 20), tok(Token::Eq, 20, 21), tok(Token::Numeric(NumericLiteral::Decimal(1)), 21, 22),
+        tok(Token::Newline, 22, 23),
+        tok(Token::KwWhen, 24, 28), tok(Token::Ident, 29, 30), tok(Token::FatArrow, 30, 32),
+        tok(Token::Ident, 32, 33), tok(Token::Eq, 33, 34), tok(Token::Numeric(NumericLiteral::Decimal(2)), 34, 35),
+        tok(Token::Newline, 35, 36),
+        tok(Token::Dedent, 36, 36),
+    ];
+    match &parse_stmt_tokens(s, t).node {
+        StmtKind::ParallelBlock(pb) => {
+            assert_eq!(pb.arms.len(), 2);
+            assert!(pb.safe.is_none());
+        }
+        _ => panic!("expected ParallelBlock"),
+    }
+}
+
+#[test]
+fn block_assert_always() {
+    let s = "assert always @ ck: x > 0, \"msg\"";
+    let t = vec![
+        tok(Token::KwAssert, 0, 6), tok(Token::KwAlways, 7, 13),
+        tok(Token::At, 14, 15), tok(Token::Ident, 16, 18),
+        tok(Token::Colon, 18, 19), tok(Token::Ident, 20, 21),
+        tok(Token::Greater, 22, 23), tok(Token::Numeric(NumericLiteral::Decimal(0)), 24, 25),
+        tok(Token::Comma, 25, 26), tok(Token::StringLit("msg".into()), 27, 32),
+    ];
+    match &parse_stmt_tokens(s, t).node {
+        StmtKind::Assert(a) => {
+            assert!(a.always);
+            assert!(a.domain.is_some());
+            assert!(a.message.is_some());
+        }
+        _ => panic!("expected Assert"),
+    }
+}
+
+#[test]
+fn block_for_loop() {
+    let s = "for i in 0..8:\n  x=i\n";
+    let t = vec![
+        tok(Token::KwFor, 0, 3), tok(Token::Ident, 4, 5), tok(Token::KwIn, 6, 8),
+        tok(Token::Numeric(NumericLiteral::Decimal(0)), 9, 10),
+        tok(Token::RangeExclusive, 10, 12),
+        tok(Token::Numeric(NumericLiteral::Decimal(8)), 12, 13),
+        tok(Token::Colon, 13, 14), tok(Token::Newline, 14, 15), tok(Token::Indent, 15, 15),
+        tok(Token::Ident, 17, 18), tok(Token::Eq, 18, 19), tok(Token::Ident, 19, 20),
+        tok(Token::Newline, 20, 21), tok(Token::Dedent, 21, 21),
+    ];
+    match &parse_stmt_tokens(s, t).node {
+        StmtKind::For(f) => {
+            assert_eq!(f.var.node, "i");
+            assert_eq!(f.body.len(), 1);
+        }
+        _ => panic!("expected For"),
+    }
+}
+
+#[test]
+fn block_assume_with_domain() {
+    let s = "assume @ clk: ready";
+    let t = vec![
+        tok(Token::KwAssume, 0, 6), tok(Token::At, 7, 8), tok(Token::Ident, 9, 12),
+        tok(Token::Colon, 12, 13), tok(Token::Ident, 14, 19),
+    ];
+    match &parse_stmt_tokens(s, t).node {
+        StmtKind::Assume { domain, message, .. } => {
+            assert!(domain.is_some());
+            assert!(message.is_none());
+        }
+        _ => panic!("expected Assume"),
+    }
+}
