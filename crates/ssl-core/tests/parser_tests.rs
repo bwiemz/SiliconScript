@@ -4,6 +4,8 @@ use ssl_core::parser::Parser;
 use ssl_core::ast::expr::{BinOp, ExprKind, UnaryOp};
 use ssl_core::lexer::NumericLiteral;
 use ssl_core::parser::expr::parse_expr;
+use ssl_core::ast::types::{TypeExprKind, Direction};
+use ssl_core::parser::types::{parse_type_expr, parse_type_expr_with_domain};
 
 fn s(start: u32, end: u32) -> Span {
     Span::new(start, end)
@@ -619,4 +621,114 @@ fn expr_range_exclusive() {
 fn expr_range_inclusive() {
     let expr = parse_one_expr("0..=7");
     assert!(matches!(&expr.node, ExprKind::Range { inclusive: true, .. }));
+}
+
+fn parse_one_type(src: &str) -> ssl_core::ast::types::TypeExpr {
+    let tokens = ssl_core::lexer::tokenize(src).expect("lexer failed");
+    let tokens: Vec<_> = tokens.into_iter()
+        .filter(|t| !matches!(t.node, Token::LineComment | Token::BlockComment | Token::Newline | Token::Indent | Token::Dedent | Token::DocComment))
+        .collect();
+    let mut p = Parser::new(src, tokens);
+    parse_type_expr(&mut p).expect("parse error")
+}
+
+fn parse_one_type_with_domain(src: &str) -> ssl_core::ast::types::TypeExpr {
+    let tokens = ssl_core::lexer::tokenize(src).expect("lexer failed");
+    let tokens: Vec<_> = tokens.into_iter()
+        .filter(|t| !matches!(t.node, Token::LineComment | Token::BlockComment | Token::Newline | Token::Indent | Token::Dedent | Token::DocComment))
+        .collect();
+    let mut p = Parser::new(src, tokens);
+    parse_type_expr_with_domain(&mut p).expect("parse error")
+}
+
+#[test]
+fn type_named_bool() {
+    assert!(matches!(parse_one_type("Bool").node, TypeExprKind::Named(ref n) if n == "Bool"));
+}
+
+#[test]
+fn type_generic_uint8() {
+    match &parse_one_type("UInt<8>").node {
+        TypeExprKind::Generic { name, params } => { assert_eq!(name, "UInt"); assert_eq!(params.len(), 1); }
+        other => panic!("expected Generic, got {:?}", other),
+    }
+}
+
+#[test]
+fn type_array_of_generic() {
+    assert!(matches!(&parse_one_type("UInt<8>[32]").node, TypeExprKind::Array { element, .. } if matches!(element.node, TypeExprKind::Generic { .. })));
+}
+
+#[test]
+fn type_flip_of_generic() {
+    assert!(matches!(&parse_one_type("Flip<Stream<T>>").node, TypeExprKind::Flip(inner) if matches!(inner.node, TypeExprKind::Generic { .. })));
+}
+
+#[test]
+fn type_direction_wrapper_in() {
+    match &parse_one_type("in<Bool>").node {
+        TypeExprKind::DirectionWrapper { dir, .. } => assert_eq!(*dir, Direction::In),
+        other => panic!("expected DirectionWrapper, got {:?}", other),
+    }
+}
+
+#[test]
+fn type_direction_wrapper_out() {
+    match &parse_one_type("out<UInt<8>>").node {
+        TypeExprKind::DirectionWrapper { dir, .. } => assert_eq!(*dir, Direction::Out),
+        other => panic!("expected DirectionWrapper, got {:?}", other),
+    }
+}
+
+#[test]
+fn type_domain_annotated() {
+    match &parse_one_type_with_domain("UInt<8> @ sys_clk").node {
+        TypeExprKind::DomainAnnotated { domain, .. } => assert_eq!(domain.node, "sys_clk"),
+        other => panic!("expected DomainAnnotated, got {:?}", other),
+    }
+}
+
+#[test]
+fn type_fixed_two_params() {
+    match &parse_one_type("Fixed<8, 8>").node {
+        TypeExprKind::Generic { name, params } => { assert_eq!(name, "Fixed"); assert_eq!(params.len(), 2); }
+        other => panic!("expected Generic, got {:?}", other),
+    }
+}
+
+#[test]
+fn type_sync_reset_no_polarity() {
+    assert!(matches!(parse_one_type("SyncReset").node, TypeExprKind::SyncReset { polarity: None }));
+}
+
+#[test]
+fn type_async_reset_active_low() {
+    match &parse_one_type("AsyncReset<active_low>").node {
+        TypeExprKind::AsyncReset { polarity } => assert_eq!(*polarity, Some(ssl_core::ast::types::ResetPolarity::ActiveLow)),
+        other => panic!("expected AsyncReset, got {:?}", other),
+    }
+}
+
+#[test]
+fn type_clock_with_edge() {
+    match &parse_one_type("Clock<100, rising>").node {
+        TypeExprKind::Clock { freq, edge } => { assert!(freq.is_some()); assert_eq!(*edge, Some(ssl_core::ast::types::ClockEdge::Rising)); }
+        other => panic!("expected Clock, got {:?}", other),
+    }
+}
+
+#[test]
+fn type_memory() {
+    match &parse_one_type("Memory<UInt<8>, depth=1024>").node {
+        TypeExprKind::Memory { element, params } => { assert!(matches!(element.node, TypeExprKind::Generic { .. })); assert_eq!(params.len(), 1); }
+        other => panic!("expected Memory, got {:?}", other),
+    }
+}
+
+#[test]
+fn type_partial_interface() {
+    match &parse_one_type("AXI4Lite.{read_addr, read_data}").node {
+        TypeExprKind::PartialInterface { name, groups } => { assert_eq!(name, "AXI4Lite"); assert_eq!(groups.len(), 2); }
+        other => panic!("expected PartialInterface, got {:?}", other),
+    }
 }

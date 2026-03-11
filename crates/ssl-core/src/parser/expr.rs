@@ -45,6 +45,36 @@ pub fn parse_expr(p: &mut Parser<'_>) -> Result<Expr, ParseError> {
     parse_pipe_expr(p)
 }
 
+/// Parse an expression for use inside generic argument lists (`<...>`).
+/// Stops before `>`, `>>`, `>=`, `<=`, `<` to avoid consuming generic closing tokens.
+pub(crate) fn parse_expr_in_generic(p: &mut Parser<'_>) -> Result<Expr, ParseError> {
+    let mut lhs = parse_unary(p)?;
+    lhs = parse_postfix(p, lhs)?;
+    loop {
+        let tok = match p.peek() {
+            Some(t) => t.clone(),
+            None => break,
+        };
+        // Stop before any angle-bracket tokens to avoid consuming generic delimiters
+        if matches!(tok, Token::Less | Token::Greater | Token::ShiftRight | Token::GreaterEq | Token::LessEq) {
+            break;
+        }
+        let (op, prec, assoc) = match infix_binding_power(&tok) {
+            Some(info) => info,
+            None => break,
+        };
+        p.advance();
+        let next_min = if assoc == Assoc::Right { prec } else { prec + 1 };
+        let rhs = parse_pratt(p, next_min)?;
+        let span = lhs.span.merge(rhs.span);
+        lhs = Spanned::new(
+            ExprKind::Binary { op, lhs: Box::new(lhs), rhs: Box::new(rhs) },
+            span,
+        );
+    }
+    Ok(lhs)
+}
+
 /// Parse pipe expressions: `expr |> call_expr`. Lowest precedence.
 fn parse_pipe_expr(p: &mut Parser<'_>) -> Result<Expr, ParseError> {
     let mut lhs = parse_pratt(p, 0)?;
