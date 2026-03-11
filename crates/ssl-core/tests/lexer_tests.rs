@@ -283,3 +283,40 @@ fn blank_lines_dont_affect_indent() {
     let types: Vec<Token> = tokens.iter().map(|s| s.node.clone()).collect();
     assert_eq!(types.iter().filter(|t| **t == Token::Indent).count(), 1);
 }
+
+#[test]
+fn phase2_new_keywords() {
+    let tokens = token_types(
+        "testbench task var drive peek settle print \
+         systolic dataflow \
+         isa instr format registers encoding_width \
+         prove equiv constrain \
+         override"
+    );
+    assert_eq!(tokens, vec![
+        Token::KwTestbench, Token::KwTask, Token::KwVar,
+        Token::KwDrive, Token::KwPeek, Token::KwSettle, Token::KwPrint,
+        Token::KwSystolic, Token::KwDataflow,
+        Token::KwIsa, Token::KwInstr, Token::KwFormat,
+        Token::KwRegisters, Token::KwEncodingWidth,
+        Token::KwProve, Token::KwEquiv, Token::KwConstrain,
+        Token::KwOverride,
+    ]);
+}
+
+#[test]
+fn phase2_biarrow_operator() {
+    let tokens = token_types("a <-> b");
+    assert_eq!(tokens, vec![Token::Ident, Token::BiArrow, Token::Ident]);
+}
+
+#[test]
+fn phase2_biarrow_no_conflict() {
+    // Ensure <-> doesn't break < or ->
+    let tokens = token_types("a < b -> c <-> d");
+    assert_eq!(tokens, vec![
+        Token::Ident, Token::Less, Token::Ident,
+        Token::ThinArrow, Token::Ident,
+        Token::BiArrow, Token::Ident,
+    ]);
+}

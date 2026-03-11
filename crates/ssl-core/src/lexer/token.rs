@@ -170,11 +170,59 @@ pub enum Token {
     #[token("test")]
     KwTest,
 
+    // Simulation Keywords (Phase 2)
+    #[token("testbench")]
+    KwTestbench,
+    #[token("task")]
+    KwTask,
+    #[token("var")]
+    KwVar,
+    #[token("drive")]
+    KwDrive,
+    #[token("peek")]
+    KwPeek,
+    #[token("settle")]
+    KwSettle,
+    #[token("print")]
+    KwPrint,
+
+    // AI Accelerator Keywords (Phase 2)
+    #[token("systolic")]
+    KwSystolic,
+    #[token("dataflow")]
+    KwDataflow,
+
+    // ISA Keywords (Phase 2)
+    #[token("isa")]
+    KwIsa,
+    #[token("instr")]
+    KwInstr,
+    #[token("format")]
+    KwFormat,
+    #[token("registers")]
+    KwRegisters,
+    #[token("encoding_width")]
+    KwEncodingWidth,
+
+    // Formal Verification Keywords (Phase 2)
+    #[token("prove")]
+    KwProve,
+    #[token("equiv")]
+    KwEquiv,
+    #[token("constrain")]
+    KwConstrain,
+
+    // Other Keywords (Phase 2)
+    #[token("override")]
+    KwOverride,
+
     // Operators (multi-char before single-char for correct matching)
     #[token(">>>")]
     ArithShiftRight,
     #[token("-->")]
     LongArrow,
+    #[token("<->", priority = 6)]
+    BiArrow,
     #[token("**")]
     StarStar,
     #[token("++")]
@@ -387,6 +435,24 @@ impl Token {
                 | Token::KwUnchecked
                 | Token::KwStaticAssert
                 | Token::KwTest
+                | Token::KwTestbench
+                | Token::KwTask
+                | Token::KwVar
+                | Token::KwDrive
+                | Token::KwPeek
+                | Token::KwSettle
+                | Token::KwPrint
+                | Token::KwSystolic
+                | Token::KwDataflow
+                | Token::KwIsa
+                | Token::KwInstr
+                | Token::KwFormat
+                | Token::KwRegisters
+                | Token::KwEncodingWidth
+                | Token::KwProve
+                | Token::KwEquiv
+                | Token::KwConstrain
+                | Token::KwOverride
         )
     }
 }
