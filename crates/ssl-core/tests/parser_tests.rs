@@ -1213,3 +1213,84 @@ fn item_gen_for() {
         other => panic!("expected GenFor, got {:?}", other),
     }
 }
+
+// --- End-to-end tests ---
+
+fn parse_source(source: &str) -> ssl_core::ast::item::SourceFile {
+    let tokens = ssl_core::lexer::tokenize(source).expect("lex failed");
+    let mut parser = Parser::new(source, tokens);
+    parser.parse_file().expect("parse failed")
+}
+
+#[test]
+fn e2e_module_with_signal_and_comb() {
+    let src = "module Counter(in clk: Clock, in rst: SyncReset, out count: UInt<8>):\n  signal r: UInt<8>\n  comb:\n    count = r\n";
+    let file = parse_source(src);
+    assert_eq!(file.items.len(), 1);
+    match &file.items[0].node {
+        ItemKind::Module(m) => {
+            assert_eq!(m.name.node, "Counter");
+            assert_eq!(m.ports.len(), 3);
+            assert_eq!(m.body.len(), 2);
+        }
+        other => panic!("expected Module, got {:?}", other),
+    }
+}
+
+#[test]
+fn e2e_module_with_reg_block() {
+    let src = "module Reg8(in clk: Clock, in rst: SyncReset, in d: UInt<8>, out q: UInt<8>):\n  signal r: UInt<8>\n  reg(clk, rst):\n    on reset:\n      r = 0\n    on tick:\n      r = d\n  comb:\n    q = r\n";
+    let file = parse_source(src);
+    match &file.items[0].node {
+        ItemKind::Module(m) => { assert_eq!(m.body.len(), 3); }
+        other => panic!("expected Module, got {:?}", other),
+    }
+}
+
+#[test]
+fn e2e_struct_definition() {
+    let src = "struct Header:\n  version: UInt<4>\n  length: UInt<12>\n  flags: UInt<8>\n";
+    let file = parse_source(src);
+    match &file.items[0].node {
+        ItemKind::Struct(s) => { assert_eq!(s.fields.len(), 3); }
+        other => panic!("expected Struct, got {:?}", other),
+    }
+}
+
+#[test]
+fn e2e_enum_onehot() {
+    let src = "enum Color [onehot]:\n  Red\n  Green = 4\n  Blue\n";
+    let file = parse_source(src);
+    match &file.items[0].node {
+        ItemKind::Enum(e) => {
+            assert_eq!(e.encoding, Some(EnumEncoding::Onehot));
+            assert_eq!(e.variants.len(), 3);
+            assert!(e.variants[1].value.is_some());
+        }
+        other => panic!("expected Enum, got {:?}", other),
+    }
+}
+
+#[test]
+fn e2e_fn_definition() {
+    let src = "fn saturate(x: UInt<16>, max: UInt<16>) -> UInt<16>:\n  if x > max:\n    max\n  else:\n    x\n";
+    let file = parse_source(src);
+    match &file.items[0].node {
+        ItemKind::FnDef(f) => {
+            assert_eq!(f.name.node, "saturate");
+            assert_eq!(f.params.len(), 2);
+            assert_eq!(f.body.len(), 1);
+        }
+        other => panic!("expected FnDef, got {:?}", other),
+    }
+}
+
+#[test]
+fn e2e_assert_always() {
+    let src = "module Safe(in clk: Clock, in rst: SyncReset, in x: UInt<8>):\n  assert always @ clk: x != 0, \"x must not be zero\"\n";
+    let file = parse_source(src);
+    match &file.items[0].node {
+        ItemKind::Module(m) => { assert_eq!(m.body.len(), 1); }
+        other => panic!("expected Module, got {:?}", other),
+    }
+}

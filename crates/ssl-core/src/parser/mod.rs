@@ -176,12 +176,6 @@ impl<'src> Parser<'src> {
 
     pub fn parse(source: &str, tokens: Vec<Spanned<Token>>) -> Result<SourceFile, ParseError> {
         let mut parser = Parser::new(source, tokens);
-        let mut items = Vec::new();
-        parser.skip_newlines();
-        while !parser.is_at_end() {
-            items.push(parser.parse_item()?);
-            parser.skip_newlines();
-        }
-        Ok(SourceFile { items })
+        parser.parse_file()
     }
 }
