@@ -380,3 +380,243 @@ fn expr_power_right_assoc() {
         _ => panic!("expected Binary Pow"),
     }
 }
+
+#[test]
+fn expr_method_call() {
+    let expr = parse_one_expr("a.truncate(8)");
+    match &expr.node {
+        ExprKind::MethodCall { object, method, args } => {
+            assert!(matches!(object.node, ExprKind::Ident(_)));
+            assert_eq!(method.node, "truncate");
+            assert_eq!(args.len(), 1);
+        }
+        _ => panic!("expected MethodCall, got {:?}", expr.node),
+    }
+}
+
+#[test]
+fn expr_chained_field_access() {
+    // a.b.c  =>  FieldAccess(FieldAccess(a, b), c)
+    let expr = parse_one_expr("a.b.c");
+    match &expr.node {
+        ExprKind::FieldAccess { object, field } => {
+            assert_eq!(field.node, "c");
+            match &object.node {
+                ExprKind::FieldAccess { field: inner_field, .. } => {
+                    assert_eq!(inner_field.node, "b");
+                }
+                _ => panic!("expected nested FieldAccess"),
+            }
+        }
+        _ => panic!("expected FieldAccess"),
+    }
+}
+
+#[test]
+fn expr_nested_call() {
+    let expr = parse_one_expr("f(g(x))");
+    match &expr.node {
+        ExprKind::Call { callee, args } => {
+            match &callee.node {
+                ExprKind::Ident(name) => assert_eq!(name, "f"),
+                _ => panic!("expected f"),
+            }
+            assert_eq!(args.len(), 1);
+            match &args[0].value.node {
+                ExprKind::Call { callee, args } => {
+                    match &callee.node {
+                        ExprKind::Ident(name) => assert_eq!(name, "g"),
+                        _ => panic!("expected g"),
+                    }
+                    assert_eq!(args.len(), 1);
+                }
+                _ => panic!("expected inner Call"),
+            }
+        }
+        _ => panic!("expected Call"),
+    }
+}
+
+#[test]
+fn expr_complex_precedence() {
+    // a + b * c - d  =>  Binary(Sub, Binary(Add, a, Binary(Mul, b, c)), d)
+    let expr = parse_one_expr("a + b * c - d");
+    match &expr.node {
+        ExprKind::Binary { op, lhs, rhs } => {
+            assert_eq!(*op, BinOp::Sub);
+            assert!(matches!(rhs.node, ExprKind::Ident(_)));
+            match &lhs.node {
+                ExprKind::Binary { op, rhs: inner_rhs, .. } => {
+                    assert_eq!(*op, BinOp::Add);
+                    assert!(matches!(inner_rhs.node, ExprKind::Binary { op: BinOp::Mul, .. }));
+                }
+                _ => panic!("expected Add"),
+            }
+        }
+        _ => panic!("expected Binary"),
+    }
+}
+
+#[test]
+fn expr_comparison_chain() {
+    // a == b != c  =>  Binary(Ne, Binary(Eq, a, b), c)
+    let expr = parse_one_expr("a == b != c");
+    match &expr.node {
+        ExprKind::Binary { op, lhs, .. } => {
+            assert_eq!(*op, BinOp::Ne);
+            match &lhs.node {
+                ExprKind::Binary { op, .. } => assert_eq!(*op, BinOp::Eq),
+                _ => panic!("expected Eq"),
+            }
+        }
+        _ => panic!("expected Binary"),
+    }
+}
+
+#[test]
+fn expr_bitwise_ops() {
+    // a & b | c ^ d  =>  Binary(BitOr, Binary(BitAnd, a, b), Binary(BitXor, c, d))
+    let expr = parse_one_expr("a & b | c ^ d");
+    match &expr.node {
+        ExprKind::Binary { op, lhs, rhs } => {
+            assert_eq!(*op, BinOp::BitOr);
+            match &lhs.node {
+                ExprKind::Binary { op, .. } => assert_eq!(*op, BinOp::BitAnd),
+                _ => panic!("expected BitAnd"),
+            }
+            match &rhs.node {
+                ExprKind::Binary { op, .. } => assert_eq!(*op, BinOp::BitXor),
+                _ => panic!("expected BitXor"),
+            }
+        }
+        _ => panic!("expected Binary"),
+    }
+}
+
+#[test]
+fn expr_shift_ops() {
+    let expr = parse_one_expr("a << 2");
+    match &expr.node {
+        ExprKind::Binary { op, .. } => assert_eq!(*op, BinOp::Shl),
+        _ => panic!("expected Shl"),
+    }
+}
+
+#[test]
+fn expr_method_on_field() {
+    // a.field.method(x)
+    let expr = parse_one_expr("a.field.method(x)");
+    match &expr.node {
+        ExprKind::MethodCall { object, method, args } => {
+            assert_eq!(method.node, "method");
+            assert_eq!(args.len(), 1);
+            match &object.node {
+                ExprKind::FieldAccess { field, .. } => assert_eq!(field.node, "field"),
+                _ => panic!("expected FieldAccess"),
+            }
+        }
+        _ => panic!("expected MethodCall"),
+    }
+}
+
+#[test]
+fn expr_struct_literal_as_call() {
+    // Point(x=1, y=2) — parsed as Call with named args
+    let expr = parse_one_expr("Point(x=1, y=2)");
+    match &expr.node {
+        ExprKind::Call { callee, args } => {
+            match &callee.node {
+                ExprKind::Ident(name) => assert_eq!(name, "Point"),
+                _ => panic!("expected Ident"),
+            }
+            assert_eq!(args.len(), 2);
+            assert_eq!(args[0].name.as_ref().unwrap().node, "x");
+            assert_eq!(args[1].name.as_ref().unwrap().node, "y");
+        }
+        _ => panic!("expected Call (struct literal)"),
+    }
+}
+
+#[test]
+fn expr_index_then_field() {
+    // a[0].field
+    let expr = parse_one_expr("a[0].field");
+    match &expr.node {
+        ExprKind::FieldAccess { object, field } => {
+            assert_eq!(field.node, "field");
+            assert!(matches!(object.node, ExprKind::Index { .. }));
+        }
+        _ => panic!("expected FieldAccess"),
+    }
+}
+
+#[test]
+fn expr_paren_changes_precedence() {
+    // (a + b) * c  =>  Binary(Mul, Paren(Binary(Add, a, b)), c)
+    let expr = parse_one_expr("(a + b) * c");
+    match &expr.node {
+        ExprKind::Binary { op, lhs, .. } => {
+            assert_eq!(*op, BinOp::Mul);
+            match &lhs.node {
+                ExprKind::Paren(inner) => {
+                    assert!(matches!(inner.node, ExprKind::Binary { op: BinOp::Add, .. }));
+                }
+                _ => panic!("expected Paren"),
+            }
+        }
+        _ => panic!("expected Binary Mul"),
+    }
+}
+
+#[test]
+fn expr_mixed_named_positional_args() {
+    let expr = parse_one_expr("f(a, name=b, c)");
+    match &expr.node {
+        ExprKind::Call { args, .. } => {
+            assert_eq!(args.len(), 3);
+            assert!(args[0].name.is_none());
+            assert_eq!(args[1].name.as_ref().unwrap().node, "name");
+            assert!(args[2].name.is_none());
+        }
+        _ => panic!("expected Call"),
+    }
+}
+
+#[test]
+fn expr_next_single() {
+    let expr = parse_one_expr("next(valid)");
+    match &expr.node {
+        ExprKind::Next { count, .. } => assert!(count.is_none()),
+        _ => panic!("expected Next"),
+    }
+}
+
+#[test]
+fn expr_next_with_count() {
+    let expr = parse_one_expr("next(valid, 3)");
+    match &expr.node {
+        ExprKind::Next { count, .. } => assert!(count.is_some()),
+        _ => panic!("expected Next with count"),
+    }
+}
+
+#[test]
+fn expr_eventually_with_depth() {
+    let expr = parse_one_expr("eventually(resp_valid, depth=16)");
+    match &expr.node {
+        ExprKind::Eventually { .. } => {} // depth is always present (Box<Expr>)
+        _ => panic!("expected Eventually"),
+    }
+}
+
+#[test]
+fn expr_range_exclusive() {
+    let expr = parse_one_expr("0..8");
+    assert!(matches!(&expr.node, ExprKind::Range { inclusive: false, .. }));
+}
+
+#[test]
+fn expr_range_inclusive() {
+    let expr = parse_one_expr("0..=7");
+    assert!(matches!(&expr.node, ExprKind::Range { inclusive: true, .. }));
+}
