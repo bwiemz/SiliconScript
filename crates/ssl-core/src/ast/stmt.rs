@@ -1,7 +1,7 @@
 use crate::span::{Span, Spanned};
-use super::{Ident, Attribute};
-use super::expr::{Expr, CallArg};
-use super::types::{TypeExpr, Direction, GenericParam};
+use super::Ident;
+use super::expr::Expr;
+use super::types::{TypeExpr, GenericParam};
 
 pub type Stmt = Spanned<StmtKind>;
 

@@ -1,6 +1,6 @@
 use crate::ast::expr::{BinOp, CallArg, Expr, ExprKind, UnaryOp};
 use crate::lexer::Token;
-use crate::span::{Span, Spanned};
+use crate::span::Spanned;
 
 use super::{ParseError, Parser};
 
@@ -202,9 +202,7 @@ fn parse_postfix(p: &mut Parser<'_>, mut lhs: Expr) -> Result<Expr, ParseError> 
                 if p.check(Token::LParen) {
                     p.advance(); // consume `(`
                     let args = parse_call_args(p)?;
-                    let end_pos = p.pos.saturating_sub(1);
-                    let end = p.tokens.get(end_pos).map_or(lhs.span.end, |t| t.span.end);
-                    let span = lhs.span.merge(Span::new(end, end));
+                    let span = lhs.span.merge(p.prev_span());
                     lhs = Spanned::new(
                         ExprKind::MethodCall {
                             object: Box::new(lhs),
@@ -255,9 +253,7 @@ fn parse_postfix(p: &mut Parser<'_>, mut lhs: Expr) -> Result<Expr, ParseError> 
             Some(Token::LParen) => {
                 p.advance(); // consume `(`
                 let args = parse_call_args(p)?;
-                let end_pos = p.pos.saturating_sub(1);
-                let end = p.tokens.get(end_pos).map_or(lhs.span.end, |t| t.span.end);
-                let span = lhs.span.merge(Span::new(end, end));
+                let span = lhs.span.merge(p.prev_span());
                 lhs = Spanned::new(
                     ExprKind::Call {
                         callee: Box::new(lhs),

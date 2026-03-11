@@ -118,6 +118,16 @@ impl<'src> Parser<'src> {
         self.pos >= self.tokens.len()
     }
 
+    pub fn prev_span(&self) -> Span {
+        self.tokens
+            .get(self.pos.wrapping_sub(1))
+            .map(|t| t.span)
+            .unwrap_or_else(|| {
+                let end = self.source.len() as u32;
+                Span::new(end, end)
+            })
+    }
+
     pub fn error(&self, msg: impl Into<String>) -> ParseError {
         ParseError {
             message: msg.into(),
