@@ -10,7 +10,7 @@ pub type Ident = Spanned<String>;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Attribute {
     pub name: Ident,
-    pub args: Vec<Spanned<expr::Expr>>,
+    pub args: Vec<expr::Expr>,
     pub span: Span,
 }
 

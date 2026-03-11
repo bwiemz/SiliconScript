@@ -54,6 +54,7 @@ impl<'src> Parser<'src> {
     }
 
     pub fn advance(&mut self) -> Spanned<Token> {
+        assert!(self.pos < self.tokens.len(), "advance() called at end of token stream");
         let tok = self.tokens[self.pos].clone();
         self.pos += 1;
         tok

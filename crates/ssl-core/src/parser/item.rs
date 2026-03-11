@@ -90,11 +90,7 @@ impl<'src> Parser<'src> {
         self.expect_token(Token::At)?;
         let name = self.expect_ident()?;
         let args = if self.eat(Token::LParen).is_some() {
-            self.parse_comma_list(Token::RParen, |p| {
-                let e = parse_expr(p)?;
-                let span = e.span;
-                Ok(Spanned::new(e, span))
-            })?
+            self.parse_comma_list(Token::RParen, parse_expr)?
         } else {
             Vec::new()
         };
