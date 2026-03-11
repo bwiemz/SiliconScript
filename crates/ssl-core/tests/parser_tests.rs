@@ -6,6 +6,8 @@ use ssl_core::lexer::NumericLiteral;
 use ssl_core::parser::expr::parse_expr;
 use ssl_core::ast::types::{TypeExprKind, Direction};
 use ssl_core::parser::types::{parse_type_expr, parse_type_expr_with_domain};
+use ssl_core::ast::stmt::StmtKind;
+use ssl_core::parser::stmt::parse_stmt;
 
 fn s(start: u32, end: u32) -> Span {
     Span::new(start, end)
@@ -731,4 +733,71 @@ fn type_partial_interface() {
         TypeExprKind::PartialInterface { name, groups } => { assert_eq!(name, "AXI4Lite"); assert_eq!(groups.len(), 2); }
         other => panic!("expected PartialInterface, got {:?}", other),
     }
+}
+
+fn parse_one_stmt(src: &str) -> ssl_core::ast::stmt::Stmt {
+    let tokens = ssl_core::lexer::tokenize(src).expect("lexer failed");
+    let tokens: Vec<_> = tokens.into_iter()
+        .filter(|t| !matches!(t.node, Token::LineComment | Token::BlockComment | Token::Newline | Token::Indent | Token::Dedent | Token::DocComment))
+        .collect();
+    let mut p = Parser::new(src, tokens);
+    parse_stmt(&mut p).expect("parse error")
+}
+
+#[test]
+fn stmt_signal_decl() {
+    match &parse_one_stmt("signal counter: UInt<8>").node {
+        StmtKind::Signal(d) => {
+            assert_eq!(d.name.node, "counter");
+            assert!(d.domain.is_none());
+            assert!(d.init.is_none());
+        }
+        other => panic!("expected Signal, got {:?}", other),
+    }
+}
+
+#[test]
+fn stmt_signal_with_domain_and_init() {
+    match &parse_one_stmt("signal counter: UInt<8> @ sys_clk = 0").node {
+        StmtKind::Signal(d) => {
+            assert_eq!(d.domain.as_ref().unwrap().node, "sys_clk");
+            assert!(d.init.is_some());
+        }
+        other => panic!("expected Signal, got {:?}", other),
+    }
+}
+
+#[test]
+fn stmt_let_decl() {
+    assert!(matches!(&parse_one_stmt("let x = 42").node, StmtKind::Let(d) if d.name.node == "x" && d.ty.is_none()));
+}
+
+#[test]
+fn stmt_let_with_type() {
+    assert!(matches!(&parse_one_stmt("let x: UInt<8> = 42").node, StmtKind::Let(d) if d.ty.is_some()));
+}
+
+#[test]
+fn stmt_const_decl() {
+    assert!(matches!(&parse_one_stmt("const WIDTH: UInt<8> = 32").node, StmtKind::Const(d) if d.name.node == "WIDTH"));
+}
+
+#[test]
+fn stmt_type_alias() {
+    assert!(matches!(&parse_one_stmt("type Word = UInt<32>").node, StmtKind::TypeAlias(d) if d.name.node == "Word"));
+}
+
+#[test]
+fn stmt_assignment() {
+    assert!(matches!(parse_one_stmt("x = y + 1").node, StmtKind::Assign { .. }));
+}
+
+#[test]
+fn stmt_expr_stmt() {
+    assert!(matches!(parse_one_stmt("foo(bar)").node, StmtKind::ExprStmt(_)));
+}
+
+#[test]
+fn stmt_static_assert() {
+    assert!(matches!(parse_one_stmt("static_assert WIDTH > 0, \"width must be positive\"").node, StmtKind::StaticAssert { .. }));
 }
