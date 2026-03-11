@@ -76,7 +76,8 @@ fn parse_assign_or_expr_stmt(p: &mut Parser<'_>) -> Result<Stmt, ParseError> {
         let rhs = parse_expr(p)?;
         Ok(Spanned::new(StmtKind::Assign { target: lhs, value: rhs }, start.merge(p.prev_span())))
     } else {
-        Ok(Spanned::new(StmtKind::ExprStmt(lhs.clone()), lhs.span))
+        let span = lhs.span;
+        Ok(Spanned::new(StmtKind::ExprStmt(lhs), span))
     }
 }
 
