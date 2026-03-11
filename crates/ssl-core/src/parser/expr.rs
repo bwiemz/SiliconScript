@@ -56,7 +56,7 @@ pub(crate) fn parse_expr_in_generic(p: &mut Parser<'_>) -> Result<Expr, ParseErr
             None => break,
         };
         // Stop before any angle-bracket tokens to avoid consuming generic delimiters
-        if matches!(tok, Token::Less | Token::Greater | Token::ShiftRight | Token::GreaterEq | Token::LessEq) {
+        if matches!(tok, Token::Less | Token::Greater | Token::ShiftLeft | Token::ShiftRight | Token::GreaterEq | Token::LessEq) {
             break;
         }
         let (op, prec, assoc) = match infix_binding_power(&tok) {

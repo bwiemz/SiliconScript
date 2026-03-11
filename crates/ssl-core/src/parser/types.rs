@@ -125,6 +125,7 @@ fn parse_generic_arg_list(p: &mut Parser<'_>) -> Result<Vec<GenericArg>, ParseEr
         }
         p.skip_newlines();
     }
+    p.skip_newlines();
     expect_close_angle(p)?;
     Ok(items)
 }
