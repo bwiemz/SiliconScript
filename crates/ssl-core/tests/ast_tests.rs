@@ -112,3 +112,127 @@ fn construct_attribute() {
     };
     assert_eq!(attr.name.node, "clock");
 }
+
+use ssl_core::ast::stmt::*;
+use ssl_core::ast::item::*;
+
+#[test]
+fn construct_signal_decl() {
+    let decl = SignalDecl {
+        name: ident("counter"),
+        ty: Spanned::new(TypeExprKind::Named("UInt".into()), s(0, 4)),
+        domain: Some(ident("sys_clk")),
+        init: None,
+    };
+    assert_eq!(decl.name.node, "counter");
+    assert!(decl.domain.is_some());
+}
+
+#[test]
+fn construct_if_stmt() {
+    let cond = Spanned::new(ExprKind::Ident("enable".into()), s(0, 6));
+    let body_stmt = Spanned::new(
+        StmtKind::Assign {
+            target: Spanned::new(ExprKind::Ident("x".into()), s(0, 1)),
+            value: Spanned::new(ExprKind::IntLiteral(NumericLiteral::Decimal(1)), s(4, 5)),
+        },
+        s(0, 5),
+    );
+    let if_stmt = IfStmt {
+        condition: cond,
+        then_body: vec![body_stmt],
+        elif_branches: vec![],
+        else_body: None,
+    };
+    assert_eq!(if_stmt.then_body.len(), 1);
+}
+
+#[test]
+fn construct_module_def() {
+    let port = Port {
+        doc: None,
+        direction: Direction::In,
+        name: ident("clk"),
+        ty: Spanned::new(
+            TypeExprKind::Clock { freq: None, edge: None },
+            s(0, 5),
+        ),
+        span: s(0, 10),
+    };
+    let module = ModuleDef {
+        doc: None,
+        attrs: vec![],
+        public: true,
+        name: ident("ALU"),
+        generics: vec![],
+        ports: vec![port],
+        default_domain: None,
+        body: vec![],
+    };
+    assert_eq!(module.name.node, "ALU");
+    assert!(module.public);
+    assert_eq!(module.ports.len(), 1);
+}
+
+#[test]
+fn construct_enum_def() {
+    let variant = EnumVariant {
+        name: ident("Idle"),
+        value: None,
+        span: s(0, 4),
+    };
+    let def = EnumDef {
+        doc: None,
+        name: ident("State"),
+        encoding: Some(EnumEncoding::Onehot),
+        variants: vec![variant],
+    };
+    assert_eq!(def.encoding, Some(EnumEncoding::Onehot));
+}
+
+#[test]
+fn construct_fsm_transition() {
+    let trans = FsmTransition {
+        from: FsmStateRef::Named(ident("Idle")),
+        condition: FsmCondition::Expr(
+            Spanned::new(ExprKind::Ident("start".into()), s(0, 5)),
+        ),
+        to: FsmStateRef::Named(ident("Running")),
+        actions: vec![],
+        span: s(0, 30),
+    };
+    assert!(matches!(trans.from, FsmStateRef::Named(_)));
+    assert!(matches!(trans.condition, FsmCondition::Expr(_)));
+}
+
+#[test]
+fn construct_pipeline_stage() {
+    let stage = PipelineStage {
+        index: Spanned::new(ExprKind::IntLiteral(NumericLiteral::Decimal(0)), s(0, 1)),
+        label: Some("fetch".into()),
+        stall_when: None,
+        flush_when: None,
+        body: vec![],
+        span: s(0, 20),
+    };
+    assert_eq!(stage.label, Some("fetch".into()));
+}
+
+#[test]
+fn construct_source_file() {
+    let module_item = Spanned::new(
+        ItemKind::Module(ModuleDef {
+            doc: None,
+            attrs: vec![],
+            public: false,
+            name: ident("Top"),
+            generics: vec![],
+            ports: vec![],
+            default_domain: None,
+            body: vec![],
+        }),
+        s(0, 50),
+    );
+    let file = SourceFile { items: vec![module_item] };
+    assert_eq!(file.items.len(), 1);
+}
