@@ -13,14 +13,17 @@ pub mod resolve;
 
 pub mod check;
 
+pub mod validate;
+
 use crate::ast::item::SourceFile;
 
 /// Run the full semantic analysis pipeline on a parsed source file.
 ///
 /// Pass 1: Name resolution — populates the symbol table.
 /// Pass 2: Type checking — validates expression types and statement semantics.
+/// Pass 3: Hardware validation — enforces hardware-semantic constraints.
 ///
-/// Returns the final symbol table and all accumulated errors from both passes.
+/// Returns the final symbol table and all accumulated errors from all passes.
 pub fn analyze(file: &SourceFile) -> (scope::SymbolTable, Vec<SemaError>) {
     let mut errors = Vec::new();
 
@@ -34,6 +37,11 @@ pub fn analyze(file: &SourceFile) -> (scope::SymbolTable, Vec<SemaError>) {
     let mut checker = check::TypeChecker::new(&table, &scope_map);
     checker.check_file(file);
     errors.append(&mut checker.into_errors());
+
+    // Pass 3: Hardware validation.
+    let mut validator = validate::Validator::new(&table, &scope_map);
+    validator.validate_file(file);
+    errors.append(&mut validator.into_errors());
 
     (table, errors)
 }

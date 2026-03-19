@@ -567,3 +567,54 @@ fn analyze_error_recovery() {
     let undefined_errors: Vec<_> = errors.iter().filter(|e| matches!(e, SemaError::UndefinedName { .. })).collect();
     assert_eq!(undefined_errors.len(), 1, "one undefined error: {errors:?}");
 }
+
+// ── Validation tests ──
+
+#[test]
+fn validate_comb_complete_assignment() {
+    let errors = check_source("module M():\n    signal x: Bool\n    signal y: UInt<8>\n    comb:\n        if x:\n            y = 1\n        else:\n            y = 0\n");
+    assert!(errors.is_empty(), "y assigned on all paths: {errors:?}");
+}
+
+#[test]
+fn validate_comb_incomplete_assignment() {
+    let errors = check_source("module M():\n    signal x: Bool\n    signal y: UInt<8>\n    comb:\n        if x:\n            y = 1\n");
+    let latch_errors: Vec<_> = errors.iter().filter(|e| matches!(e, SemaError::LatchInferred { .. })).collect();
+    assert!(!latch_errors.is_empty(), "should detect latch on y");
+}
+
+#[test]
+fn validate_comb_default_then_override() {
+    let errors = check_source("module M():\n    signal x: Bool\n    signal y: UInt<8>\n    comb:\n        y = 0\n        if x:\n            y = 1\n");
+    assert!(errors.is_empty(), "default + override is complete: {errors:?}");
+}
+
+#[test]
+fn validate_comb_match_no_wildcard() {
+    let errors = check_source("module M():\n    signal sel: UInt<2>\n    signal y: UInt<8>\n    comb:\n        match sel:\n            0 => y = 1\n            1 => y = 2\n");
+    assert!(!errors.is_empty(), "match without wildcard should error");
+}
+
+#[test]
+fn validate_reg_reset_coverage() {
+    let errors = check_source("module M(\n    in clk: Clock,\n    in rst: SyncReset\n):\n    signal x: UInt<8>\n    signal y: UInt<8>\n    reg(clk, rst):\n        on reset:\n            x = 0\n        on tick:\n            x = x + 1\n            y = x\n");
+    assert!(!errors.is_empty(), "y in on_tick but not on_reset");
+}
+
+#[test]
+fn validate_reg_reset_complete() {
+    let errors = check_source("module M(\n    in clk: Clock,\n    in rst: SyncReset\n):\n    signal x: UInt<8>\n    reg(clk, rst):\n        on reset:\n            x = 0\n        on tick:\n            x = x + 1\n");
+    assert!(errors.is_empty(), "complete reg block: {errors:?}");
+}
+
+#[test]
+fn validate_const_not_reassigned() {
+    let errors = check_source("module M():\n    const X: uint = 8\n    comb:\n        X = 16\n");
+    assert!(!errors.is_empty(), "cannot assign to const");
+}
+
+#[test]
+fn validate_output_port_driven() {
+    let errors = check_source("module M(\n    out y: UInt<8>\n):\n    signal x: Bool\n");
+    assert!(!errors.is_empty(), "output port y is never driven");
+}
