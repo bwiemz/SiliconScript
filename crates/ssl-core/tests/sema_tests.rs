@@ -1,4 +1,5 @@
 use ssl_core::sema::SemaError;
+use ssl_core::sema::types::Ty;
 use ssl_core::span::Span;
 
 #[test]
@@ -89,4 +90,83 @@ fn sema_error_is_std_error() {
     let _: &dyn std::error::Error = &err;
     let msg = format!("{err}");
     assert!(msg.contains("something went wrong"));
+}
+
+#[test]
+fn ty_uint_width() {
+    assert_eq!(Ty::UInt(8).bit_width(), Some(8));
+}
+
+#[test]
+fn ty_bool_width() {
+    assert_eq!(Ty::Bool.bit_width(), Some(1));
+}
+
+#[test]
+fn ty_sint_width() {
+    assert_eq!(Ty::SInt(16).bit_width(), Some(16));
+}
+
+#[test]
+fn ty_bits_width() {
+    assert_eq!(Ty::Bits(32).bit_width(), Some(32));
+}
+
+#[test]
+fn ty_array_width() {
+    let t = Ty::Array { element: Box::new(Ty::UInt(8)), size: 4 };
+    assert_eq!(t.bit_width(), Some(32));
+}
+
+#[test]
+fn ty_clock_width() {
+    assert_eq!(Ty::Clock { freq: None }.bit_width(), Some(1));
+}
+
+#[test]
+fn ty_display() {
+    assert_eq!(Ty::UInt(8).to_string(), "UInt<8>");
+    assert_eq!(Ty::SInt(16).to_string(), "SInt<16>");
+    assert_eq!(Ty::Bool.to_string(), "Bool");
+    assert_eq!(Ty::Bits(32).to_string(), "Bits<32>");
+}
+
+#[test]
+fn ty_is_numeric() {
+    assert!(Ty::UInt(8).is_numeric());
+    assert!(Ty::SInt(16).is_numeric());
+    assert!(Ty::Bits(32).is_numeric());
+    assert!(!Ty::Bool.is_numeric());
+    assert!(!Ty::Clock { freq: None }.is_numeric());
+}
+
+#[test]
+fn ty_is_integer() {
+    assert!(Ty::UInt(8).is_integer());
+    assert!(Ty::SInt(16).is_integer());
+    assert!(!Ty::Bits(32).is_integer());
+    assert!(!Ty::Bool.is_integer());
+}
+
+#[test]
+fn ty_fixed_width() {
+    let t = Ty::Fixed { int_bits: 8, frac_bits: 8 };
+    assert_eq!(t.bit_width(), Some(16));
+    assert_eq!(t.to_string(), "Fixed<8, 8>");
+}
+
+#[test]
+fn ty_meta_types_no_width() {
+    assert_eq!(Ty::MetaUInt.bit_width(), None);
+    assert_eq!(Ty::MetaInt.bit_width(), None);
+    assert_eq!(Ty::MetaBool.bit_width(), None);
+}
+
+#[test]
+fn ty_is_synthesizable() {
+    assert!(Ty::UInt(8).is_synthesizable());
+    assert!(Ty::Bool.is_synthesizable());
+    assert!(!Ty::MetaUInt.is_synthesizable());
+    assert!(!Ty::MetaString.is_synthesizable());
+    assert!(!Ty::Error.is_synthesizable());
 }
