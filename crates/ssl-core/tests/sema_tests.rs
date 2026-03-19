@@ -618,3 +618,138 @@ fn validate_output_port_driven() {
     let errors = check_source("module M(\n    out y: UInt<8>\n):\n    signal x: Bool\n");
     assert!(!errors.is_empty(), "output port y is never driven");
 }
+
+// ── End-to-end integration tests ──
+
+#[test]
+fn e2e_alu_module() {
+    let errors = check_source("\
+module ALU(
+    in  a:      UInt<32>,
+    in  b:      UInt<32>,
+    in  opcode: Bits<4>,
+    out result: UInt<32>,
+    out zero:   Bool
+):
+    comb:
+        result = a + b
+        zero = result == 0
+");
+    assert!(errors.is_empty(), "ALU should pass: {errors:?}");
+}
+
+#[test]
+fn e2e_shift_register() {
+    let errors = check_source("\
+module ShiftReg(
+    in  clk:  Clock,
+    in  rst:  SyncReset,
+    in  din:  UInt<8>,
+    out dout: UInt<8>
+):
+    signal stage0: UInt<8>
+    signal stage1: UInt<8>
+    signal stage2: UInt<8>
+
+    reg(clk, rst):
+        on reset:
+            stage0 = 0
+            stage1 = 0
+            stage2 = 0
+        on tick:
+            stage0 = din
+            stage1 = stage0
+            stage2 = stage1
+
+    comb:
+        dout = stage2
+");
+    assert!(errors.is_empty(), "shift register should pass: {errors:?}");
+}
+
+#[test]
+fn e2e_width_mismatch() {
+    let errors = check_source("\
+module M(
+    in a: UInt<16>,
+    out b: UInt<8>
+):
+    comb:
+        b = a
+");
+    assert!(!errors.is_empty(), "assigning UInt<16> to UInt<8> should error");
+}
+
+#[test]
+fn e2e_type_mismatch_uint_sint() {
+    let errors = check_source("\
+module M():
+    signal a: UInt<8>
+    signal b: SInt<8>
+    comb:
+        b = a
+");
+    assert!(!errors.is_empty(), "UInt to SInt without conversion should error");
+}
+
+#[test]
+fn e2e_input_port_not_driven_ok() {
+    let errors = check_source("\
+module M(
+    in  clk: Clock,
+    out led: Bool
+):
+    comb:
+        led = true
+");
+    assert!(errors.is_empty(), "input ports don't need driving: {errors:?}");
+}
+
+#[test]
+fn e2e_multiple_comb_blocks() {
+    let errors = check_source("\
+module M(
+    in  a: UInt<8>,
+    in  b: UInt<8>,
+    out x: UInt<8>,
+    out y: Bool
+):
+    comb:
+        x = a + b
+
+    comb:
+        y = a == b
+");
+    assert!(errors.is_empty(), "multiple comb blocks: {errors:?}");
+}
+
+#[test]
+fn e2e_nested_if_complete() {
+    let errors = check_source("\
+module M(
+    in  sel: UInt<2>,
+    out y: UInt<8>
+):
+    comb:
+        if sel == 0:
+            y = 10
+        elif sel == 1:
+            y = 20
+        elif sel == 2:
+            y = 30
+        else:
+            y = 40
+");
+    assert!(errors.is_empty(), "nested if/elif/else complete: {errors:?}");
+}
+
+#[test]
+fn e2e_blinker_from_file() {
+    let src = std::fs::read_to_string(
+        format!("{}/../../examples/blinker.ssl", env!("CARGO_MANIFEST_DIR"))
+    ).expect("read blinker.ssl");
+    let tokens = ssl_core::lexer::tokenize(&src).expect("tokenize failed");
+    let file = ssl_core::parser::Parser::parse(&src, tokens).expect("parse blinker");
+    let (_table, errors) = ssl_core::sema::analyze(&file);
+    assert!(errors.is_empty(), "blinker.ssl should pass: {errors:?}");
+}
