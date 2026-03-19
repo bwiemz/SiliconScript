@@ -1,0 +1,4 @@
+module Bad():
+    signal x: Undefined
+    comb:
+        x = 42

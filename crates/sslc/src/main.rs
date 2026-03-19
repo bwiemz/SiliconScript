@@ -20,7 +20,7 @@ fn main() {
 
     if args.len() < 2 {
         eprintln!("Usage: sslc <command> [args]");
-        eprintln!("Commands:  lex <file>  |  parse <file>");
+        eprintln!("Commands:  lex <file>  |  parse <file>  |  check <file>");
         std::process::exit(1);
     }
 
@@ -55,6 +55,27 @@ fn main() {
                     eprintln!("Parse error: {}", e);
                     std::process::exit(1);
                 }
+            }
+        }
+        "check" => {
+            let (_path, source) = read_source(&args, "check");
+            let tokens = tokenize(&source).unwrap_or_else(|e| {
+                eprintln!("Lex error: {}", e);
+                std::process::exit(1);
+            });
+            let file = Parser::parse(&source, tokens).unwrap_or_else(|e| {
+                eprintln!("Parse error: {}", e);
+                std::process::exit(1);
+            });
+            let (_table, errors) = ssl_core::sema::analyze(&file);
+            if errors.is_empty() {
+                println!("No errors found ({} top-level items)", file.items.len());
+            } else {
+                for err in &errors {
+                    eprintln!("error: {}", err);
+                }
+                eprintln!("{} error(s) found", errors.len());
+                std::process::exit(1);
             }
         }
         other => {
