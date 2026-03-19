@@ -342,7 +342,8 @@ fn resolve_source(src: &str) -> (ssl_core::sema::scope::SymbolTable, Vec<SemaErr
     let file = ssl_core::parser::Parser::parse(src, tokens).expect("parse failed");
     let mut resolver = Resolver::new();
     resolver.collect_declarations(&file);
-    resolver.finish()
+    let (table, _scope_map, errors) = resolver.finish();
+    (table, errors)
 }
 
 #[test]
@@ -432,4 +433,137 @@ fn resolve_type_const_width() {
 fn resolve_type_fixed_point() {
     let (_table, errors) = resolve_source("module M():\n    signal weight: Fixed<8, 8>\n");
     assert!(errors.is_empty(), "Fixed<8,8> should resolve: {errors:?}");
+}
+
+// ── Type checker / analyze() tests ──────────────────────────────────────────
+
+/// Helper: check a module and return errors (runs full analysis pipeline).
+fn check_source(src: &str) -> Vec<SemaError> {
+    let tokens = ssl_core::lexer::tokenize(src).expect("tokenize failed");
+    let file = ssl_core::parser::Parser::parse(src, tokens).expect("parse failed");
+    ssl_core::sema::analyze(&file).1
+}
+
+// ── Expression type checking ──
+
+#[test]
+fn check_add_same_width() {
+    let errors = check_source("module M():\n    signal a: UInt<8>\n    signal b: UInt<8>\n    signal c: UInt<8>\n    comb:\n        c = a + b\n");
+    assert!(errors.is_empty(), "same-width add: {errors:?}");
+}
+
+#[test]
+fn check_add_different_width_error() {
+    let errors = check_source("module M():\n    signal a: UInt<8>\n    signal b: UInt<16>\n    signal c: UInt<8>\n    comb:\n        c = a + b\n");
+    assert!(!errors.is_empty(), "UInt<16> result into UInt<8> should error");
+}
+
+#[test]
+fn check_add_different_width_ok() {
+    let errors = check_source("module M():\n    signal a: UInt<8>\n    signal b: UInt<16>\n    signal c: UInt<16>\n    comb:\n        c = a + b\n");
+    assert!(errors.is_empty(), "UInt<16> result into UInt<16>: {errors:?}");
+}
+
+#[test]
+fn check_bool_and_bool() {
+    let errors = check_source("module M():\n    signal a: Bool\n    signal b: Bool\n    signal c: Bool\n    comb:\n        c = a and b\n");
+    assert!(errors.is_empty(), "Bool and Bool: {errors:?}");
+}
+
+#[test]
+fn check_comparison_returns_bool() {
+    let errors = check_source("module M():\n    signal a: UInt<8>\n    signal b: UInt<8>\n    signal c: Bool\n    comb:\n        c = a == b\n");
+    assert!(errors.is_empty(), "comparison returns Bool: {errors:?}");
+}
+
+#[test]
+fn check_integer_literal_fits() {
+    let errors = check_source("module M():\n    signal x: UInt<8>\n    comb:\n        x = 255\n");
+    assert!(errors.is_empty(), "255 fits UInt<8>: {errors:?}");
+}
+
+#[test]
+fn check_bitwise_same_width() {
+    let errors = check_source("module M():\n    signal a: UInt<8>\n    signal b: UInt<8>\n    signal c: UInt<8>\n    comb:\n        c = a & b\n");
+    assert!(errors.is_empty(), "bitwise AND: {errors:?}");
+}
+
+#[test]
+fn check_concat_width() {
+    let errors = check_source("module M():\n    signal a: Bits<8>\n    signal b: Bits<8>\n    signal c: Bits<16>\n    comb:\n        c = a ++ b\n");
+    assert!(errors.is_empty(), "concat Bits<8>++Bits<8>=Bits<16>: {errors:?}");
+}
+
+#[test]
+fn check_mul_width_widening() {
+    let errors = check_source("module M():\n    signal a: UInt<8>\n    signal b: UInt<8>\n    signal c: UInt<16>\n    comb:\n        c = a * b\n");
+    assert!(errors.is_empty(), "UInt<8>*UInt<8>=UInt<16>: {errors:?}");
+}
+
+#[test]
+fn check_mul_width_too_narrow() {
+    let errors = check_source("module M():\n    signal a: UInt<8>\n    signal b: UInt<8>\n    signal c: UInt<8>\n    comb:\n        c = a * b\n");
+    assert!(!errors.is_empty(), "UInt<16> into UInt<8> should error");
+}
+
+// ── Statement type checking ──
+
+#[test]
+fn check_if_condition_must_be_bool() {
+    let errors = check_source("module M():\n    signal x: UInt<8>\n    signal y: UInt<8>\n    comb:\n        y = 0\n        if x:\n            y = 1\n");
+    assert!(!errors.is_empty(), "if condition must be Bool, not UInt<8>");
+}
+
+#[test]
+fn check_reg_block_clock_type() {
+    let errors = check_source("module M(\n    in clk: Clock,\n    in rst: SyncReset\n):\n    signal counter: UInt<8>\n    reg(clk, rst):\n        on reset:\n            counter = 0\n        on tick:\n            counter = counter + 1\n");
+    assert!(errors.is_empty(), "valid reg block: {errors:?}");
+}
+
+#[test]
+fn check_reg_block_non_clock_error() {
+    let errors = check_source("module M():\n    signal x: UInt<8>\n    signal y: UInt<8>\n    reg(x, y):\n        on reset:\n            y = 0\n        on tick:\n            y = y + 1\n");
+    assert!(!errors.is_empty(), "reg first arg must be Clock");
+}
+
+#[test]
+fn check_assign_to_input_port() {
+    let errors = check_source("module M(\n    in a: UInt<8>\n):\n    comb:\n        a = 42\n");
+    assert!(!errors.is_empty(), "cannot assign to input port");
+}
+
+// ── Item type checking ──
+
+#[test]
+fn check_module_ports_valid() {
+    let errors = check_source("module ALU(\n    in a: UInt<32>,\n    in b: UInt<32>,\n    out result: UInt<32>\n):\n    comb:\n        result = a + b\n");
+    assert!(errors.is_empty(), "valid ALU: {errors:?}");
+}
+
+#[test]
+fn check_struct_fields_valid() {
+    let errors = check_source("struct Pixel:\n    r: UInt<8>\n    g: UInt<8>\n    b: UInt<8>\n");
+    assert!(errors.is_empty(), "valid struct: {errors:?}");
+}
+
+// ── Orchestration ──
+
+#[test]
+fn analyze_full_blinker() {
+    let src = "module Blinker(\n    in  clk: Clock,\n    in  rst: SyncReset,\n    out led: Bool\n):\n    signal counter: UInt<24>\n\n    reg(clk, rst):\n        on reset:\n            counter = 0\n        on tick:\n            counter = counter + 1\n\n    comb:\n        led = counter[23]\n";
+    let errors = check_source(src);
+    assert!(errors.is_empty(), "blinker should pass: {errors:?}");
+}
+
+#[test]
+fn analyze_multiple_errors_reported() {
+    let errors = check_source("module M():\n    signal x: Undefined\n    signal y: AlsoUndefined\n");
+    assert!(errors.len() >= 2, "should report multiple errors: {errors:?}");
+}
+
+#[test]
+fn analyze_error_recovery() {
+    let errors = check_source("module M():\n    signal bad: Undefined\n    signal good: UInt<8>\n    comb:\n        good = 42\n");
+    let undefined_errors: Vec<_> = errors.iter().filter(|e| matches!(e, SemaError::UndefinedName { .. })).collect();
+    assert_eq!(undefined_errors.len(), 1, "one undefined error: {errors:?}");
 }

@@ -18,6 +18,11 @@ use super::types::{EnumId, InterfaceId, StructId, Ty};
 // Resolver
 // ---------------------------------------------------------------------------
 
+/// Maps from an AST item's name-span start offset to the `ScopeId` created
+/// for that item's body.  The TypeChecker uses this to enter the right scope
+/// when walking modules, functions, etc.
+pub type ScopeMap = HashMap<u32, ScopeId>;
+
 /// Name resolution + type resolution pass.
 ///
 /// Walks the AST, registers all declarations into the `SymbolTable`, and
@@ -26,6 +31,8 @@ pub struct Resolver {
     table: SymbolTable,
     errors: Vec<SemaError>,
     scope_stack: Vec<ScopeId>,
+    /// Maps name-span start → ScopeId for every scope-introducing item.
+    scope_map: ScopeMap,
     /// Const values available for use as generic params (e.g. `UInt<W>`).
     const_values: HashMap<String, ConstValue>,
     /// Monotonically-increasing counters for user-defined type IDs.
@@ -47,6 +54,7 @@ impl Resolver {
             table,
             errors: Vec::new(),
             scope_stack: vec![root],
+            scope_map: HashMap::new(),
             const_values: HashMap::new(),
             next_struct_id: 0,
             next_enum_id: 0,
@@ -61,9 +69,9 @@ impl Resolver {
         }
     }
 
-    /// Consume the resolver and return the completed symbol table and any errors.
-    pub fn finish(self) -> (SymbolTable, Vec<SemaError>) {
-        (self.table, self.errors)
+    /// Consume the resolver and return the completed symbol table, scope map, and any errors.
+    pub fn finish(self) -> (SymbolTable, ScopeMap, Vec<SemaError>) {
+        (self.table, self.scope_map, self.errors)
     }
 
     // -----------------------------------------------------------------------
@@ -139,7 +147,9 @@ impl Resolver {
         let span = def.name.span;
         self.define(name, SymbolKind::Module, Ty::Void, span);
 
-        self.push_scope(ScopeKind::Module);
+        let scope_id = self.push_scope(ScopeKind::Module);
+        // Record mapping so the TypeChecker can find this scope.
+        self.scope_map.insert(span.start, scope_id);
 
         // Register ports.
         for port in &def.ports {
@@ -197,7 +207,8 @@ impl Resolver {
         let span = def.name.span;
         self.define(name, SymbolKind::Fn, Ty::Void, span);
 
-        self.push_scope(ScopeKind::Function);
+        let scope_id = self.push_scope(ScopeKind::Function);
+        self.scope_map.insert(span.start, scope_id);
 
         for param in &def.params {
             let param_ty = self.resolve_type(&param.ty);
