@@ -1,6 +1,9 @@
 use ssl_core::sema::SemaError;
 use ssl_core::sema::types::Ty;
 use ssl_core::sema::scope::{SymbolTable, SymbolKind};
+use ssl_core::sema::eval::{ConstValue, ConstEval};
+use ssl_core::ast::expr::ExprKind;
+use ssl_core::lexer::NumericLiteral;
 use ssl_core::span::Span;
 
 #[test]
@@ -234,4 +237,97 @@ fn scope_list_local_symbols() {
     table.define(root, "b", SymbolKind::Const, Ty::MetaUInt, Span::new(2, 3)).unwrap();
     let locals = table.local_symbols(root);
     assert_eq!(locals.len(), 2);
+}
+
+// ── Const Evaluator Tests ────────────────────────────────────────────────────
+
+use ssl_core::span::Spanned;
+
+fn make_int_expr(val: u128) -> ssl_core::ast::expr::Expr {
+    Spanned::new(ExprKind::IntLiteral(NumericLiteral::Decimal(val)), Span::new(0, 1))
+}
+
+#[test]
+fn eval_integer_literal() {
+    let evaluator = ConstEval::new();
+    let expr = make_int_expr(42);
+    let result = evaluator.eval_expr(&expr);
+    assert_eq!(result, Ok(ConstValue::UInt(42)));
+}
+
+#[test]
+fn eval_bool_literal() {
+    let evaluator = ConstEval::new();
+    let expr = Spanned::new(ExprKind::BoolLiteral(true), Span::new(0, 4));
+    assert_eq!(evaluator.eval_expr(&expr), Ok(ConstValue::Bool(true)));
+}
+
+#[test]
+fn eval_binary_add() {
+    let evaluator = ConstEval::new();
+    let expr = Spanned::new(
+        ExprKind::Binary {
+            op: ssl_core::ast::expr::BinOp::Add,
+            lhs: Box::new(make_int_expr(10)),
+            rhs: Box::new(make_int_expr(32)),
+        },
+        Span::new(0, 5),
+    );
+    assert_eq!(evaluator.eval_expr(&expr), Ok(ConstValue::UInt(42)));
+}
+
+#[test]
+fn eval_binary_mul() {
+    let evaluator = ConstEval::new();
+    let expr = Spanned::new(
+        ExprKind::Binary {
+            op: ssl_core::ast::expr::BinOp::Mul,
+            lhs: Box::new(make_int_expr(6)),
+            rhs: Box::new(make_int_expr(7)),
+        },
+        Span::new(0, 5),
+    );
+    assert_eq!(evaluator.eval_expr(&expr), Ok(ConstValue::UInt(42)));
+}
+
+#[test]
+fn eval_binary_pow() {
+    let evaluator = ConstEval::new();
+    let expr = Spanned::new(
+        ExprKind::Binary {
+            op: ssl_core::ast::expr::BinOp::Pow,
+            lhs: Box::new(make_int_expr(2)),
+            rhs: Box::new(make_int_expr(10)),
+        },
+        Span::new(0, 5),
+    );
+    assert_eq!(evaluator.eval_expr(&expr), Ok(ConstValue::UInt(1024)));
+}
+
+#[test]
+fn eval_comparison() {
+    let evaluator = ConstEval::new();
+    let expr = Spanned::new(
+        ExprKind::Binary {
+            op: ssl_core::ast::expr::BinOp::Lt,
+            lhs: Box::new(make_int_expr(5)),
+            rhs: Box::new(make_int_expr(10)),
+        },
+        Span::new(0, 5),
+    );
+    assert_eq!(evaluator.eval_expr(&expr), Ok(ConstValue::Bool(true)));
+}
+
+#[test]
+fn eval_if_expr() {
+    let evaluator = ConstEval::new();
+    let expr = Spanned::new(
+        ExprKind::IfExpr {
+            condition: Box::new(Spanned::new(ExprKind::BoolLiteral(true), Span::new(0, 4))),
+            then_expr: Box::new(make_int_expr(10)),
+            else_expr: Box::new(make_int_expr(20)),
+        },
+        Span::new(0, 10),
+    );
+    assert_eq!(evaluator.eval_expr(&expr), Ok(ConstValue::UInt(10)));
 }

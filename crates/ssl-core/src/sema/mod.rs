@@ -5,3 +5,6 @@ pub mod types;
 pub use types::Ty;
 
 pub mod scope;
+
+pub mod eval;
+pub use eval::{ConstEval, ConstValue};
