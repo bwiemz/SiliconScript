@@ -115,6 +115,17 @@ impl<'src> Parser<'src> {
         }
     }
 
+    /// Skip whitespace tokens that are irrelevant inside delimited contexts
+    /// (parentheses, brackets). This includes Newline, Indent, and Dedent.
+    pub fn skip_structural(&mut self) {
+        while matches!(
+            self.peek(),
+            Some(Token::Newline | Token::Indent | Token::Dedent)
+        ) {
+            self.advance();
+        }
+    }
+
     pub fn is_at_end(&self) -> bool {
         self.pos >= self.tokens.len()
     }
@@ -162,14 +173,14 @@ impl<'src> Parser<'src> {
         mut f: impl FnMut(&mut Self) -> Result<T, ParseError>,
     ) -> Result<Vec<T>, ParseError> {
         let mut items = Vec::new();
-        self.skip_newlines();
+        self.skip_structural();
         while !self.check(close_token.clone()) && !self.is_at_end() {
             items.push(f(self)?);
-            self.skip_newlines();
+            self.skip_structural();
             if self.eat(Token::Comma).is_none() {
                 break;
             }
-            self.skip_newlines();
+            self.skip_structural();
         }
         self.expect_token(close_token)?;
         Ok(items)
