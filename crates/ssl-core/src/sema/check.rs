@@ -582,11 +582,18 @@ impl<'a> TypeChecker<'a> {
                 same_kind_with_width(&lhs_ty, w)
             }
 
-            // Shifts: static Shl returns UInt<N>, dynamic Shl returns UInt<N>
+            // Shifts: static Shl returns UInt<N+K>, dynamic Shl returns UInt<N>
             BinOp::Shl => {
-                // We don't distinguish static/dynamic here without const eval.
-                // Return same width as LHS.
-                lhs_ty.clone()
+                let lhs_w = lhs_ty.bit_width().unwrap_or(0);
+                // Try const-eval on RHS to detect static shifts
+                let evaluator = crate::sema::eval::ConstEval::new();
+                if let Ok(crate::sema::eval::ConstValue::UInt(k)) = evaluator.eval_expr(rhs) {
+                    let k = u64::try_from(k).unwrap_or(0);
+                    same_kind_with_width(&lhs_ty, lhs_w + k)
+                } else {
+                    // Dynamic shift preserves width
+                    lhs_ty.clone()
+                }
             }
             BinOp::Shr | BinOp::ArithShr => lhs_ty.clone(),
 

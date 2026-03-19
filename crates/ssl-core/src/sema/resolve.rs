@@ -23,6 +23,11 @@ use super::types::{EnumId, InterfaceId, StructId, Ty};
 /// when walking modules, functions, etc.
 pub type ScopeMap = HashMap<u32, ScopeId>;
 
+/// Safely convert u128 to u64, clamping to u64::MAX on overflow.
+fn to_u64(n: u128) -> u64 {
+    u64::try_from(n).unwrap_or(u64::MAX)
+}
+
 /// Name resolution + type resolution pass.
 ///
 /// Walks the AST, registers all declarations into the `SymbolTable`, and
@@ -460,7 +465,7 @@ impl Resolver {
                 match evaluator.eval_expr(size) {
                     Ok(ConstValue::UInt(n)) => Ty::Array {
                         element: Box::new(elem_ty),
-                        size: n as u64,
+                        size: to_u64(n),
                     },
                     Ok(other) => {
                         self.errors.push(SemaError::ConstEvalError {
@@ -483,7 +488,7 @@ impl Resolver {
                 let freq_val = freq.as_ref().and_then(|f| {
                     let ev = ConstEval::with_bindings(self.const_values.clone());
                     match ev.eval_expr(f) {
-                        Ok(ConstValue::UInt(n)) => Some(n as u64),
+                        Ok(ConstValue::UInt(n)) => Some(to_u64(n)),
                         _ => None,
                     }
                 });
@@ -667,7 +672,7 @@ impl Resolver {
             GenericArg::Expr(expr) => {
                 let ev = ConstEval::with_bindings(self.const_values.clone());
                 match ev.eval_expr(expr) {
-                    Ok(ConstValue::UInt(n)) => n as u64,
+                    Ok(ConstValue::UInt(n)) => to_u64(n),
                     Ok(other) => {
                         self.errors.push(SemaError::ConstEvalError {
                             message: format!(
@@ -691,7 +696,7 @@ impl Resolver {
                 // Try to resolve it as a const value before reporting an error.
                 if let TypeExprKind::Named(const_name) = &inner.node {
                     if let Some(ConstValue::UInt(n)) = self.const_values.get(const_name).cloned() {
-                        return n as u64;
+                        return to_u64(n);
                     }
                     // Also try the symbol table for a const binding.
                     let scope = self.current_scope();
@@ -729,7 +734,7 @@ impl Resolver {
             if arg.name.as_ref().map(|n| n.node.as_str()) == Some(param_name) {
                 let ev = ConstEval::with_bindings(self.const_values.clone());
                 match ev.eval_expr(&arg.value) {
-                    Ok(ConstValue::UInt(n)) => return n as u64,
+                    Ok(ConstValue::UInt(n)) => return to_u64(n),
                     Ok(other) => {
                         self.errors.push(SemaError::ConstEvalError {
                             message: format!(
