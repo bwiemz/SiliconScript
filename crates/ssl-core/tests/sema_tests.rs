@@ -331,3 +331,105 @@ fn eval_if_expr() {
     );
     assert_eq!(evaluator.eval_expr(&expr), Ok(ConstValue::UInt(10)));
 }
+
+// ── Resolver Tests ────────────────────────────────────────────────────────────
+
+use ssl_core::sema::resolve::Resolver;
+
+/// Parse source code and run name + type resolution.
+fn resolve_source(src: &str) -> (ssl_core::sema::scope::SymbolTable, Vec<SemaError>) {
+    let tokens = ssl_core::lexer::tokenize(src).expect("tokenize failed");
+    let file = ssl_core::parser::Parser::parse(src, tokens).expect("parse failed");
+    let mut resolver = Resolver::new();
+    resolver.collect_declarations(&file);
+    resolver.finish()
+}
+
+#[test]
+fn resolve_module_declared() {
+    let (table, errors) = resolve_source("module Foo():\n    signal x: Bool\n");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+    let sym = table.lookup(table.root_scope(), "Foo");
+    assert!(sym.is_some(), "module Foo should be in scope");
+}
+
+#[test]
+fn resolve_signal_in_module() {
+    let (table, errors) = resolve_source("module Foo():\n    signal x: UInt<8>\n");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+    assert!(table.lookup(table.root_scope(), "x").is_none(), "x should NOT be in file scope");
+}
+
+#[test]
+fn resolve_duplicate_module_error() {
+    let (_table, errors) = resolve_source("module Foo():\n    signal x: Bool\nmodule Foo():\n    signal y: Bool\n");
+    assert!(!errors.is_empty(), "should report duplicate Foo");
+}
+
+#[test]
+fn resolve_const_declaration() {
+    let (_table, errors) = resolve_source("module M():\n    const WIDTH: uint = 8\n");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+}
+
+#[test]
+fn resolve_struct_declared() {
+    let (table, errors) = resolve_source("struct Pixel:\n    r: UInt<8>\n    g: UInt<8>\n    b: UInt<8>\n");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+    assert!(table.lookup(table.root_scope(), "Pixel").is_some());
+}
+
+#[test]
+fn resolve_enum_declared() {
+    let (table, errors) = resolve_source("enum State [onehot]:\n    Idle\n    Run\n");
+    assert!(errors.is_empty(), "errors: {errors:?}");
+    assert!(table.lookup(table.root_scope(), "State").is_some());
+}
+
+#[test]
+fn resolve_type_uint8() {
+    let (_table, errors) = resolve_source("module M():\n    signal x: UInt<8>\n");
+    assert!(errors.is_empty(), "UInt<8> should resolve: {errors:?}");
+}
+
+#[test]
+fn resolve_type_bool() {
+    let (_table, errors) = resolve_source("module M():\n    signal flag: Bool\n");
+    assert!(errors.is_empty(), "Bool should resolve: {errors:?}");
+}
+
+#[test]
+fn resolve_type_array() {
+    let (_table, errors) = resolve_source("module M():\n    signal mem: UInt<8>[4]\n");
+    assert!(errors.is_empty(), "array should resolve: {errors:?}");
+}
+
+#[test]
+fn resolve_type_port_in_uint() {
+    let (_table, errors) = resolve_source("module M(\n    in a: UInt<32>,\n    out b: UInt<32>\n):\n    signal x: Bool\n");
+    assert!(errors.is_empty(), "port types should resolve: {errors:?}");
+}
+
+#[test]
+fn resolve_type_clock() {
+    let (_table, errors) = resolve_source("module M(\n    in clk: Clock\n):\n    signal x: Bool\n");
+    assert!(errors.is_empty(), "Clock should resolve: {errors:?}");
+}
+
+#[test]
+fn resolve_type_undefined_name() {
+    let (_table, errors) = resolve_source("module M():\n    signal x: Nonexistent\n");
+    assert!(!errors.is_empty(), "should error on undefined type name");
+}
+
+#[test]
+fn resolve_type_const_width() {
+    let (_table, errors) = resolve_source("module M():\n    const W: uint = 16\n    signal data: UInt<W>\n");
+    assert!(errors.is_empty(), "const width should resolve: {errors:?}");
+}
+
+#[test]
+fn resolve_type_fixed_point() {
+    let (_table, errors) = resolve_source("module M():\n    signal weight: Fixed<8, 8>\n");
+    assert!(errors.is_empty(), "Fixed<8,8> should resolve: {errors:?}");
+}
