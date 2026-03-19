@@ -50,11 +50,8 @@ pub fn parse_expr(p: &mut Parser<'_>) -> Result<Expr, ParseError> {
 pub(crate) fn parse_expr_in_generic(p: &mut Parser<'_>) -> Result<Expr, ParseError> {
     let mut lhs = parse_unary(p)?;
     lhs = parse_postfix(p, lhs)?;
-    loop {
-        let tok = match p.peek() {
-            Some(t) => t.clone(),
-            None => break,
-        };
+    while let Some(t) = p.peek() {
+        let tok = t.clone();
         // Stop before any angle-bracket tokens to avoid consuming generic delimiters
         if matches!(tok, Token::Less | Token::Greater | Token::ShiftLeft | Token::ShiftRight | Token::GreaterEq | Token::LessEq) {
             break;
@@ -120,11 +117,8 @@ fn parse_pratt(p: &mut Parser<'_>, min_prec: u8) -> Result<Expr, ParseError> {
     let mut lhs = parse_unary(p)?;
     lhs = parse_postfix(p, lhs)?;
 
-    loop {
-        let tok = match p.peek() {
-            Some(t) => t.clone(),
-            None => break,
-        };
+    while let Some(t) = p.peek() {
+        let tok = t.clone();
         let (op, prec, assoc) = match infix_binding_power(&tok) {
             Some(info) => info,
             None => break,

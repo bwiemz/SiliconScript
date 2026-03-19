@@ -41,7 +41,7 @@ impl<'src> Parser<'src> {
 
         let kind = match self.peek().cloned() {
             Some(Token::KwModule) => {
-                ItemKind::Module(self.parse_module_def(doc.take(), attrs.drain(..).collect(), public)?)
+                ItemKind::Module(self.parse_module_def(doc.take(), std::mem::take(&mut attrs), public)?)
             }
             Some(Token::KwStruct) => {
                 if !attrs.is_empty() {
