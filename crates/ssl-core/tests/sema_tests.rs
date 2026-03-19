@@ -1,5 +1,6 @@
 use ssl_core::sema::SemaError;
 use ssl_core::sema::types::Ty;
+use ssl_core::sema::scope::{SymbolTable, SymbolKind};
 use ssl_core::span::Span;
 
 #[test]
@@ -169,4 +170,68 @@ fn ty_is_synthesizable() {
     assert!(!Ty::MetaUInt.is_synthesizable());
     assert!(!Ty::MetaString.is_synthesizable());
     assert!(!Ty::Error.is_synthesizable());
+}
+
+#[test]
+fn scope_define_and_lookup() {
+    let mut table = SymbolTable::new();
+    let file_scope = table.root_scope();
+    table.define(file_scope, "counter", SymbolKind::Signal, Ty::UInt(8),
+        Span::new(0, 7)).unwrap();
+    let sym = table.lookup(file_scope, "counter");
+    assert!(sym.is_some());
+    let sym = sym.unwrap();
+    assert_eq!(sym.name, "counter");
+    assert_eq!(sym.ty, Ty::UInt(8));
+}
+
+#[test]
+fn scope_child_sees_parent() {
+    let mut table = SymbolTable::new();
+    let file_scope = table.root_scope();
+    table.define(file_scope, "top_signal", SymbolKind::Signal, Ty::Bool,
+        Span::new(0, 10)).unwrap();
+    let child = table.push_scope(file_scope, ssl_core::sema::scope::ScopeKind::Module);
+    let sym = table.lookup(child, "top_signal");
+    assert!(sym.is_some());
+}
+
+#[test]
+fn scope_child_shadows_parent() {
+    let mut table = SymbolTable::new();
+    let file_scope = table.root_scope();
+    table.define(file_scope, "x", SymbolKind::Signal, Ty::UInt(8), Span::new(0, 1)).unwrap();
+    let child = table.push_scope(file_scope, ssl_core::sema::scope::ScopeKind::Block);
+    table.define(child, "x", SymbolKind::Signal, Ty::UInt(16), Span::new(10, 11)).unwrap();
+    let sym = table.lookup(child, "x").unwrap();
+    assert_eq!(sym.ty, Ty::UInt(16));
+    let sym = table.lookup(file_scope, "x").unwrap();
+    assert_eq!(sym.ty, Ty::UInt(8));
+}
+
+#[test]
+fn scope_undefined_returns_none() {
+    let table = SymbolTable::new();
+    let root = table.root_scope();
+    assert!(table.lookup(root, "nonexistent").is_none());
+}
+
+#[test]
+fn scope_duplicate_in_same_scope() {
+    let mut table = SymbolTable::new();
+    let root = table.root_scope();
+    let r1 = table.define(root, "x", SymbolKind::Signal, Ty::UInt(8), Span::new(0, 1));
+    assert!(r1.is_ok());
+    let r2 = table.define(root, "x", SymbolKind::Signal, Ty::UInt(16), Span::new(10, 11));
+    assert!(r2.is_err());
+}
+
+#[test]
+fn scope_list_local_symbols() {
+    let mut table = SymbolTable::new();
+    let root = table.root_scope();
+    table.define(root, "a", SymbolKind::Signal, Ty::Bool, Span::new(0, 1)).unwrap();
+    table.define(root, "b", SymbolKind::Const, Ty::MetaUInt, Span::new(2, 3)).unwrap();
+    let locals = table.local_symbols(root);
+    assert_eq!(locals.len(), 2);
 }
